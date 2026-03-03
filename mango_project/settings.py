@@ -61,6 +61,8 @@ INSTALLED_APPS = [
 
     'login',
     'accounts',
+    'market',
+    'investment',
 
 ]
 
@@ -75,7 +77,7 @@ REST_FRAMEWORK = {
 }
 # JWT过期时间 配置
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=300),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
 }
 
@@ -109,6 +111,13 @@ REDIS_TIMEOUT=7*24*60*60
 CUBES_REDIS_TIMEOUT=60*60
 NEVER_REDIS_TIMEOUT=365*24*60*60
 WATCHLIST_ORPHAN_QUOTE_TTL=30*60
+INVESTMENT_QUOTE_WARMUP_ENABLED = True
+LOGO_DEV_IMAGE_BASE_URL = os.getenv("LOGO_DEV_IMAGE_BASE_URL", "https://img.logo.dev").strip().rstrip("/")
+LOGO_DEV_PUBLISHABLE_KEY = os.getenv(
+    "LOGO_DEV_PUBLISHABLE_KEY",
+    os.getenv("LOGO_DEV_API_KEY", "pk_LgAIO0lqStWd7Xgj7Tx0Og"),
+).strip()
+LOGO_DOWNLOAD_DIR = os.getenv("LOGO_DOWNLOAD_DIR", str((BASE_DIR.parent / "logo_downloads").resolve())).strip()
 
 
 # Celery 配置
@@ -207,6 +216,54 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# 邮箱配置
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+EMAIL_HOST = "smtp.163.com"
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True          # 465 用 SSL
+EMAIL_USE_TLS = False         # SSL 与 TLS 二选一，别同时开
+
+EMAIL_HOST_USER = "wryto_11@163.com"
+EMAIL_HOST_PASSWORD = "SNdJu35w6fdCNYkG"
+
+DEFAULT_FROM_EMAIL = "Mango_Finance <wryto_11@163.com>"
+
+
+# 日志配置
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "market": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "accounts": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
 
 
 

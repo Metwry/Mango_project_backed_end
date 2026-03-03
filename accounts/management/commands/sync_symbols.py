@@ -5,7 +5,8 @@ import random
 import re
 import time
 from contextlib import redirect_stderr, redirect_stdout
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 from http.client import RemoteDisconnected
 from io import StringIO
 from typing import Callable, Iterable, Iterator, Sequence
@@ -13,8 +14,10 @@ from typing import Callable, Iterable, Iterator, Sequence
 import requests
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
 
-from accounts.models import Instrument
+from market.models import Instrument
+from market.services.logo_service import build_logo_metadata
 
 
 DEFAULT_HEADERS = {
@@ -71,6 +74,10 @@ class InstrumentPayload:
     market: str
     exchange: str | None
     base_currency: str | None
+    logo_url: str | None = None
+    logo_color: str | None = None
+    logo_source: str | None = None
+    logo_updated_at: datetime | None = None
     is_active: bool = True
 
     def as_model_kwargs(self) -> dict[str, object]:
@@ -82,6 +89,10 @@ class InstrumentPayload:
             "market": self.market,
             "exchange": self.exchange,
             "base_currency": self.base_currency,
+            "logo_url": self.logo_url,
+            "logo_color": self.logo_color,
+            "logo_source": self.logo_source,
+            "logo_updated_at": self.logo_updated_at,
             "is_active": self.is_active,
         }
 
@@ -140,6 +151,9 @@ class Command(BaseCommand):
         "market",
         "exchange",
         "base_currency",
+        "logo_url",
+        "logo_source",
+        "logo_updated_at",
         "is_active",
     )
 
@@ -205,6 +219,7 @@ class Command(BaseCommand):
                 records = fetched[:limit_per_market] if limit_per_market else fetched
                 if not records:
                     raise ValueError(f"{market_label} returned empty records")
+                records = self.attach_logo_metadata(records)
 
                 created, updated, dedup_total = self.upsert_instruments(records)
                 self.stdout.write(
@@ -456,6 +471,21 @@ class Command(BaseCommand):
         if len(records) < 50:
             raise ValueError(f"CoinGecko unique symbols < 50, got {len(records)}")
         return records
+
+    def attach_logo_metadata(self, records: list[InstrumentPayload]) -> list[InstrumentPayload]:
+        now = timezone.now()
+        enriched: list[InstrumentPayload] = []
+        for item in records:
+            logo_url, logo_source = build_logo_metadata(short_code=item.short_code, market=item.market)
+            enriched.append(
+                replace(
+                    item,
+                    logo_url=logo_url,
+                    logo_source=logo_source,
+                    logo_updated_at=now if logo_url else None,
+                )
+            )
+        return enriched
 
     def fetch_stooq_fx_quote(self, *, session: requests.Session, stooq_symbol: str) -> dict[str, object]:
         params = {

@@ -1,8 +1,9 @@
 from decimal import Decimal
+
 from django.conf import settings
 from django.db import models, transaction as db_transaction
+from django.db.models import Q
 from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
 
 
 class Currency(models.TextChoices):
@@ -10,6 +11,7 @@ class Currency(models.TextChoices):
     USD = "USD", "美元"
     JPY = "JPY", "日元"
     EUR = "EUR", "欧元"
+    HKD = "HKD","港币"
 
 
 class Accounts(models.Model):
@@ -18,6 +20,7 @@ class Accounts(models.Model):
         BANK = "bank", "银行卡"
         BROKER = "broker", "证券"
         CRYPTO = "crypto", "加密货币"
+        INVESTMENT = "investment", "投资账户"
         OTHER = "other", "其他"
 
     class Status(models.TextChoices):
@@ -46,6 +49,13 @@ class Accounts(models.Model):
         db_table = "accounts"
         ordering = ["-updated_at"]
         unique_together = [("user", "name", "currency")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=Q(type="investment", name="投资账户"),
+                name="uniq_user_investment_named_account",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.user_id}-{self.name}({self.currency})"
@@ -138,114 +148,3 @@ class Transaction(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValueError("不允许删除交易记录。请使用撤销功能。")
-
-
-class Instrument(models.Model):
-    """
-    统一的交易品种基础表 (Master Symbol Table)
-    包含了美股、A股、港股、加密货币和外汇
-    """
-
-    # 1. 定义枚举类型，规范数据输入
-    class AssetClass(models.TextChoices):
-        STOCK = 'STOCK', _('股票 (Stock)')
-        CRYPTO = 'CRYPTO', _('加密货币 (Crypto)')
-        FOREX = 'FOREX', _('外汇 (Forex)')
-
-    class Market(models.TextChoices):
-        US = 'US', _('美股 (United States)')
-        CN = 'CN', _('A股 (China)')
-        HK = 'HK', _('港股 (Hong Kong)')
-        CRYPTO = 'CRYPTO', _('加密货币市场 (Crypto)')
-        FX = 'FX', _('外汇市场 (Forex)')
-
-    # 2. 核心搜索与标识字段
-    # symbol 是全局唯一的标准代码，例如: AAPL.US, 0700.HK, BTC.CRYPTO
-    symbol = models.CharField(
-        max_length=50,
-        unique=True,
-        db_index=True,
-        verbose_name="标准代码"
-    )
-
-    # short_code 用于纯代码搜索，可能重复 (如平安银行 000001 和 长和 00001)
-    short_code = models.CharField(
-        max_length=20,
-        db_index=True,
-        verbose_name="原始代码"
-    )
-
-    # name 用于中文或英文名称的模糊搜索
-    name = models.CharField(
-        max_length=100,
-        db_index=True,
-        verbose_name="品种名称"
-    )
-
-    # 3. 分类与属性字段
-    asset_class = models.CharField(
-        max_length=20,
-        choices=AssetClass.choices,
-        default=AssetClass.STOCK,
-        verbose_name="资产大类"
-    )
-
-    market = models.CharField(
-        max_length=20,
-        choices=Market.choices,
-        default=Market.US,
-        verbose_name="所属市场"
-    )
-
-    exchange = models.CharField(
-        max_length=50,
-        blank=True,
-        null=True,
-        verbose_name="交易所"
-    )
-
-    base_currency = models.CharField(
-        max_length=10,
-        blank=True,
-        null=True,
-        verbose_name="计价货币"
-    )
-
-    # 4. 状态字段
-    is_active = models.BooleanField(
-        default=True,
-        verbose_name="是否可交易",
-        help_text="用于标记退市股票或下架品种"
-    )
-
-    # 记录数据的创建和更新时间，方便日后维护
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="创建时间")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
-
-    class Meta:
-        verbose_name = "交易品种"
-        verbose_name_plural = "交易品种列表"
-        # 默认按资产类别和代码排序
-        ordering = ['asset_class', 'symbol']
-        # 建立联合索引，进一步提升在名称和代码上同时搜索的速度
-        indexes = [
-            models.Index(fields=['short_code', 'name']),
-        ]
-
-    def __str__(self):
-        return f"{self.symbol} - {self.name}"
-
-
-class WatchlistItem(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, db_index=True)
-    instrument = models.ForeignKey("accounts.Instrument", on_delete=models.CASCADE, db_index=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["user", "instrument"], name="uniq_user_instrument_watch")
-        ]
-        indexes = [
-            models.Index(fields=["user"]),
-            models.Index(fields=["instrument"]),
-        ]
