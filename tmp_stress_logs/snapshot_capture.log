@@ -1,0 +1,39 @@
+ 
+ -------------- snapshot_capture@Wry v5.6.2 (recovery)
+--- ***** ----- 
+-- ******* ---- Windows-11-10.0.26200-SP0 2026-03-04 14:55:08
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         mango_project:0x17db6c0bcb0
+- ** ---------- .> transport:   redis://127.0.0.1:6379/0
+- ** ---------- .> results:     disabled://
+- *** --- * --- .> concurrency: 16 (solo)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> snapshot_capture exchange=snapshot_capture(direct) key=snapshot_capture
+                
+
+[tasks]
+  . accounts.tasks.task_pull_watchlist_quotes
+  . snapshot.tasks.task_aggregate_d1_snapshots
+  . snapshot.tasks.task_aggregate_h4_snapshots
+  . snapshot.tasks.task_aggregate_mon1_snapshots
+  . snapshot.tasks.task_capture_m15_snapshots
+  . snapshot.tasks.task_cleanup_snapshot_history
+
+[2026-03-04 14:55:08,444: INFO/MainProcess] Connected to redis://127.0.0.1:6379/0
+[2026-03-04 14:55:08,447: INFO/MainProcess] mingle: searching for neighbors
+[2026-03-04 14:55:09,695: WARNING/MainProcess] D:\Develop\Anaconda\Lib\site-packages\celery\app\control.py:56: DuplicateNodenameWarning: Received multiple replies from node name: snapshot_cleanup@Wry.
+Please make sure you give each node a unique nodename using
+the celery worker `-n` option.
+  warnings.warn(DuplicateNodenameWarning(
+
+[2026-03-04 14:55:09,695: INFO/MainProcess] mingle: sync with 3 nodes
+[2026-03-04 14:55:09,695: INFO/MainProcess] mingle: sync complete
+[2026-03-04 14:55:09,711: INFO/MainProcess] worker.startup.pull.skipped reason=lock_exists
+[2026-03-04 14:55:09,712: INFO/MainProcess] snapshot_capture@Wry ready.
+[2026-03-04 14:55:50,319: INFO/MainProcess] Task snapshot.tasks.task_capture_m15_snapshots[0c451b48-4b25-4599-a1c0-8f40a1c42d76] received
+[2026-03-04 14:55:50,451: INFO/MainProcess] Task snapshot.tasks.task_capture_m15_snapshots[0c451b48-4b25-4599-a1c0-8f40a1c42d76] succeeded in 0.13216320000356063s: {'snapshot_level': 'M15', 'snapshot_time': '2026-03-04T06:45:00+00:00', 'account_snapshot_written': 4, 'position_snapshot_written': 6}
+[2026-03-04 14:56:32,319: INFO/MainProcess] Task snapshot.tasks.task_capture_m15_snapshots[19281e93-c86e-4db6-b7de-cc8847226d53] received
+[2026-03-04 14:56:32,430: INFO/MainProcess] Task snapshot.tasks.task_capture_m15_snapshots[19281e93-c86e-4db6-b7de-cc8847226d53] succeeded in 0.1108959999983199s: {'snapshot_level': 'M15', 'snapshot_time': '2026-03-04T06:45:00+00:00', 'account_snapshot_written': 4, 'position_snapshot_written': 6}

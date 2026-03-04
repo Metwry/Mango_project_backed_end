@@ -1,0 +1,37 @@
+ 
+ -------------- snapshot_cleanup@Wry v5.6.2 (recovery)
+--- ***** ----- 
+-- ******* ---- Windows-11-10.0.26200-SP0 2026-03-04 14:47:43
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         mango_project:0x2843884bcb0
+- ** ---------- .> transport:   redis://127.0.0.1:6379/0
+- ** ---------- .> results:     disabled://
+- *** --- * --- .> concurrency: 16 (solo)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> snapshot_cleanup exchange=snapshot_cleanup(direct) key=snapshot_cleanup
+                
+
+[tasks]
+  . accounts.tasks.task_pull_watchlist_quotes
+  . snapshot.tasks.task_aggregate_d1_snapshots
+  . snapshot.tasks.task_aggregate_h4_snapshots
+  . snapshot.tasks.task_aggregate_mon1_snapshots
+  . snapshot.tasks.task_capture_m15_snapshots
+  . snapshot.tasks.task_cleanup_snapshot_history
+
+[2026-03-04 14:47:44,006: INFO/MainProcess] Connected to redis://127.0.0.1:6379/0
+[2026-03-04 14:47:44,023: INFO/MainProcess] mingle: searching for neighbors
+[2026-03-04 14:47:45,273: INFO/MainProcess] mingle: sync with 3 nodes
+[2026-03-04 14:47:45,273: INFO/MainProcess] mingle: sync complete
+[2026-03-04 14:47:45,291: INFO/MainProcess] worker.startup.pull.skipped reason=lock_exists
+[2026-03-04 14:47:45,292: INFO/MainProcess] snapshot_cleanup@Wry ready.
+[2026-03-04 14:49:38,913: INFO/MainProcess] Task snapshot.tasks.task_cleanup_snapshot_history[db76aca4-487e-4201-917c-30dbff1d5f56] received
+[2026-03-04 14:49:39,053: INFO/MainProcess] Task snapshot.tasks.task_cleanup_snapshot_history[db76aca4-487e-4201-917c-30dbff1d5f56] succeeded in 0.14021749998209998s: {'account_deleted': 0, 'position_deleted': 0}
+[2026-03-04 14:51:10,913: INFO/MainProcess] Task snapshot.tasks.task_cleanup_snapshot_history[997394ca-33a4-4465-9446-6bf98d62284d] received
+[2026-03-04 14:51:11,026: INFO/MainProcess] Task snapshot.tasks.task_cleanup_snapshot_history[997394ca-33a4-4465-9446-6bf98d62284d] succeeded in 0.11307749996194616s: {'account_deleted': 0, 'position_deleted': 0}
+[2026-03-04 14:55:08,378: INFO/MainProcess] sync with market_sync@Wry
+[2026-03-04 14:55:08,456: INFO/MainProcess] sync with snapshot_capture@Wry
+[2026-03-04 14:55:08,525: INFO/MainProcess] sync with snapshot_aggregate@Wry

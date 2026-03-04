@@ -1,0 +1,55 @@
+ 
+ -------------- market_sync@Wry v5.6.2 (recovery)
+--- ***** ----- 
+-- ******* ---- Windows-11-10.0.26200-SP0 2026-03-04 14:55:08
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         mango_project:0x23bd0b8bcb0
+- ** ---------- .> transport:   redis://127.0.0.1:6379/0
+- ** ---------- .> results:     disabled://
+- *** --- * --- .> concurrency: 16 (solo)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> market_sync      exchange=market_sync(direct) key=market_sync
+                
+
+[tasks]
+  . accounts.tasks.task_pull_watchlist_quotes
+  . snapshot.tasks.task_aggregate_d1_snapshots
+  . snapshot.tasks.task_aggregate_h4_snapshots
+  . snapshot.tasks.task_aggregate_mon1_snapshots
+  . snapshot.tasks.task_capture_m15_snapshots
+  . snapshot.tasks.task_cleanup_snapshot_history
+
+[2026-03-04 14:55:08,368: INFO/MainProcess] Connected to redis://127.0.0.1:6379/0
+[2026-03-04 14:55:08,371: INFO/MainProcess] mingle: searching for neighbors
+[2026-03-04 14:55:09,695: WARNING/MainProcess] D:\Develop\Anaconda\Lib\site-packages\celery\app\control.py:56: DuplicateNodenameWarning: Received multiple replies from node name: snapshot_cleanup@Wry.
+Please make sure you give each node a unique nodename using
+the celery worker `-n` option.
+  warnings.warn(DuplicateNodenameWarning(
+
+[2026-03-04 14:55:09,695: INFO/MainProcess] mingle: sync with 3 nodes
+[2026-03-04 14:55:09,695: INFO/MainProcess] mingle: sync complete
+[2026-03-04 14:55:09,711: INFO/MainProcess] worker.startup.pull.skipped reason=lock_exists
+[2026-03-04 14:55:09,711: INFO/MainProcess] market_sync@Wry ready.
+[2026-03-04 14:55:33,323: INFO/MainProcess] Task accounts.tasks.task_pull_watchlist_quotes[f5f3be26-f5d0-423e-9ea9-723593b60d2c] received
+2026-03-04 14:55:33,451 [INFO] market.services.snapshot_sync_service: calendar.guard.skip market=CN reason=not_due session=regular
+2026-03-04 14:55:33,451 [INFO] market.services.snapshot_sync_service: calendar.guard.skip market=CRYPTO reason=not_due session=24x7
+2026-03-04 14:55:33,451 [INFO] market.services.snapshot_sync_service: calendar.guard.skip market=FX reason=not_due session=24x5
+2026-03-04 14:55:33,451 [INFO] market.services.snapshot_sync_service: calendar.guard.skip market=HK reason=not_due session=regular
+2026-03-04 14:55:33,451 [INFO] market.services.snapshot_sync_service: calendar.guard.skip market=US reason=outside_session session=none
+2026-03-04 14:55:33,451 [WARNING] market.services.snapshot_sync_service: 行情抓取回退生效 reused_previous=25 filled_null=0
+2026-03-04 14:55:33,453 [INFO] market.services.snapshot_sync_service: fx.usd_snapshot.skip_refresh reason=refresh_interval_not_reached
+2026-03-04 14:55:33,453 [INFO] market.services.snapshot_sync_service: watchlist.snapshot.no_market_update stale_markets=['CN', 'CRYPTO', 'FX', 'HK', 'US']
+[2026-03-04 14:55:33,453: INFO/MainProcess] Task accounts.tasks.task_pull_watchlist_quotes[f5f3be26-f5d0-423e-9ea9-723593b60d2c] succeeded in 0.12980049999896437s: {'updated_at': '2026-03-04T14:55:33.324057+08:00', 'bootstrap_mode': False, 'updated_markets': [], 'stale_markets': ['CN', 'CRYPTO', 'FX', 'HK', 'US'], 'guard_due_markets': [], 'data': {'CN': [{...}, {...}], 'HK': [{...}], 'US': [{...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}], 'CRYPTO': [{...}, {...}, {...}, {...}, {...}, {...}], 'FX': [{...}, {...}, {...}, {...}, {...}]}}
+[2026-03-04 14:56:33,323: INFO/MainProcess] Task accounts.tasks.task_pull_watchlist_quotes[640cb2c6-edc1-4a18-80f3-1aa4f9475f6d] received
+2026-03-04 14:56:33,538 [INFO] market.services.snapshot_sync_service: calendar.guard.skip market=CN reason=not_due session=regular
+2026-03-04 14:56:33,538 [INFO] market.services.snapshot_sync_service: calendar.guard.skip market=CRYPTO reason=not_due session=24x7
+2026-03-04 14:56:33,539 [INFO] market.services.snapshot_sync_service: calendar.guard.skip market=FX reason=not_due session=24x5
+2026-03-04 14:56:33,539 [INFO] market.services.snapshot_sync_service: calendar.guard.skip market=HK reason=not_due session=regular
+2026-03-04 14:56:33,539 [INFO] market.services.snapshot_sync_service: calendar.guard.skip market=US reason=outside_session session=none
+2026-03-04 14:56:33,539 [WARNING] market.services.snapshot_sync_service: 行情抓取回退生效 reused_previous=25 filled_null=0
+2026-03-04 14:56:33,541 [INFO] market.services.snapshot_sync_service: fx.usd_snapshot.skip_refresh reason=refresh_interval_not_reached
+2026-03-04 14:56:33,541 [INFO] market.services.snapshot_sync_service: watchlist.snapshot.no_market_update stale_markets=['CN', 'CRYPTO', 'FX', 'HK', 'US']
+[2026-03-04 14:56:33,541: INFO/MainProcess] Task accounts.tasks.task_pull_watchlist_quotes[640cb2c6-edc1-4a18-80f3-1aa4f9475f6d] succeeded in 0.21739080001134425s: {'updated_at': '2026-03-04T14:56:33.324104+08:00', 'bootstrap_mode': False, 'updated_markets': [], 'stale_markets': ['CN', 'CRYPTO', 'FX', 'HK', 'US'], 'guard_due_markets': [], 'data': {'CN': [{...}, {...}], 'HK': [{...}], 'US': [{...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}], 'CRYPTO': [{...}, {...}, {...}, {...}, {...}, {...}], 'FX': [{...}, {...}, {...}, {...}, {...}]}}

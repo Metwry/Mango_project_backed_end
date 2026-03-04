@@ -1,0 +1,65 @@
+ 
+ -------------- snapshot_aggregate@Wry v5.6.2 (recovery)
+--- ***** ----- 
+-- ******* ---- Windows-11-10.0.26200-SP0 2026-03-04 14:55:08
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         mango_project:0x2cc70b7bcb0
+- ** ---------- .> transport:   redis://127.0.0.1:6379/0
+- ** ---------- .> results:     disabled://
+- *** --- * --- .> concurrency: 16 (solo)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> snapshot_aggregate exchange=snapshot_aggregate(direct) key=snapshot_aggregate
+                
+
+[tasks]
+  . accounts.tasks.task_pull_watchlist_quotes
+  . snapshot.tasks.task_aggregate_d1_snapshots
+  . snapshot.tasks.task_aggregate_h4_snapshots
+  . snapshot.tasks.task_aggregate_mon1_snapshots
+  . snapshot.tasks.task_capture_m15_snapshots
+  . snapshot.tasks.task_cleanup_snapshot_history
+
+[2026-03-04 14:55:08,511: INFO/MainProcess] Connected to redis://127.0.0.1:6379/0
+[2026-03-04 14:55:08,517: INFO/MainProcess] mingle: searching for neighbors
+[2026-03-04 14:55:09,695: WARNING/MainProcess] D:\Develop\Anaconda\Lib\site-packages\celery\app\control.py:56: DuplicateNodenameWarning: Received multiple replies from node name: snapshot_cleanup@Wry.
+Please make sure you give each node a unique nodename using
+the celery worker `-n` option.
+  warnings.warn(DuplicateNodenameWarning(
+
+[2026-03-04 14:55:09,695: INFO/MainProcess] mingle: sync with 3 nodes
+[2026-03-04 14:55:09,695: INFO/MainProcess] mingle: sync complete
+[2026-03-04 14:55:09,712: WARNING/MainProcess] worker 启动完成，已立即触发一次行情补拉任务
+[2026-03-04 14:55:09,712: INFO/MainProcess] snapshot_aggregate@Wry ready.
+[2026-03-04 14:55:25,305: INFO/MainProcess] Task snapshot.tasks.task_aggregate_d1_snapshots[e7e381bf-57eb-4026-a438-87dcfd2ba823] received
+[2026-03-04 14:55:25,419: INFO/MainProcess] Task snapshot.tasks.task_aggregate_d1_snapshots[e7e381bf-57eb-4026-a438-87dcfd2ba823] succeeded in 0.11445489997277036s: {'snapshot_level': 'D1', 'source_level': 'H4', 'snapshot_time': '2026-03-04T00:00:00+00:00', 'account_snapshot_written': 4, 'position_snapshot_written': 6}
+[2026-03-04 14:55:27,317: INFO/MainProcess] Task snapshot.tasks.task_aggregate_mon1_snapshots[584faf2b-a89c-4dda-b4e7-c00a9ad2240e] received
+[2026-03-04 14:55:27,417: INFO/MainProcess] Task snapshot.tasks.task_aggregate_mon1_snapshots[584faf2b-a89c-4dda-b4e7-c00a9ad2240e] succeeded in 0.09925279999151826s: {'snapshot_level': 'MON1', 'source_level': 'none', 'snapshot_time': '2026-03-01T00:00:00+00:00', 'account_snapshot_written': 0, 'position_snapshot_written': 0}
+[2026-03-04 14:55:34,322: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[4d965c1f-0f1e-4026-a670-62df8f5461ac] received
+[2026-03-04 14:55:34,428: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[4d965c1f-0f1e-4026-a670-62df8f5461ac] succeeded in 0.10649600002216175s: {'snapshot_level': 'H4', 'source_level': 'none', 'snapshot_time': '2026-03-04T04:00:00+00:00', 'account_snapshot_written': 0, 'position_snapshot_written': 0}
+[2026-03-04 14:55:42,305: INFO/MainProcess] Task snapshot.tasks.task_aggregate_d1_snapshots[c3686269-73f5-43b8-869c-96081cefcf2b] received
+[2026-03-04 14:55:42,422: INFO/MainProcess] Task snapshot.tasks.task_aggregate_d1_snapshots[c3686269-73f5-43b8-869c-96081cefcf2b] succeeded in 0.11682480003219098s: {'snapshot_level': 'D1', 'source_level': 'H4', 'snapshot_time': '2026-03-04T00:00:00+00:00', 'account_snapshot_written': 4, 'position_snapshot_written': 6}
+[2026-03-04 14:55:47,322: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[8b323a6e-3c27-4438-8596-be22b4006bba] received
+[2026-03-04 14:55:47,419: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[8b323a6e-3c27-4438-8596-be22b4006bba] succeeded in 0.09675710002193227s: {'snapshot_level': 'H4', 'source_level': 'none', 'snapshot_time': '2026-03-04T04:00:00+00:00', 'account_snapshot_written': 0, 'position_snapshot_written': 0}
+[2026-03-04 14:55:59,305: INFO/MainProcess] Task snapshot.tasks.task_aggregate_d1_snapshots[118431d9-c6d8-409e-b574-56bcbd98f638] received
+[2026-03-04 14:55:59,421: INFO/MainProcess] Task snapshot.tasks.task_aggregate_d1_snapshots[118431d9-c6d8-409e-b574-56bcbd98f638] succeeded in 0.11661169998114929s: {'snapshot_level': 'D1', 'source_level': 'H4', 'snapshot_time': '2026-03-04T00:00:00+00:00', 'account_snapshot_written': 4, 'position_snapshot_written': 6}
+[2026-03-04 14:56:00,323: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[ece337e2-93b2-45d7-b476-8001910eaa3f] received
+[2026-03-04 14:56:00,420: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[ece337e2-93b2-45d7-b476-8001910eaa3f] succeeded in 0.09679419995518401s: {'snapshot_level': 'H4', 'source_level': 'none', 'snapshot_time': '2026-03-04T04:00:00+00:00', 'account_snapshot_written': 0, 'position_snapshot_written': 0}
+[2026-03-04 14:56:05,317: INFO/MainProcess] Task snapshot.tasks.task_aggregate_mon1_snapshots[00cdf875-a22f-48f8-a7cb-765821fd09b1] received
+[2026-03-04 14:56:05,424: INFO/MainProcess] Task snapshot.tasks.task_aggregate_mon1_snapshots[00cdf875-a22f-48f8-a7cb-765821fd09b1] succeeded in 0.10663669998757541s: {'snapshot_level': 'MON1', 'source_level': 'none', 'snapshot_time': '2026-03-01T00:00:00+00:00', 'account_snapshot_written': 0, 'position_snapshot_written': 0}
+[2026-03-04 14:56:13,322: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[84f6dd90-ac3e-410e-be56-c43991a9aed3] received
+[2026-03-04 14:56:13,424: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[84f6dd90-ac3e-410e-be56-c43991a9aed3] succeeded in 0.10242190002463758s: {'snapshot_level': 'H4', 'source_level': 'none', 'snapshot_time': '2026-03-04T04:00:00+00:00', 'account_snapshot_written': 0, 'position_snapshot_written': 0}
+[2026-03-04 14:56:16,305: INFO/MainProcess] Task snapshot.tasks.task_aggregate_d1_snapshots[3f5eae18-46f6-41e5-8ddc-227e55137bfc] received
+[2026-03-04 14:56:16,415: INFO/MainProcess] Task snapshot.tasks.task_aggregate_d1_snapshots[3f5eae18-46f6-41e5-8ddc-227e55137bfc] succeeded in 0.10994150000624359s: {'snapshot_level': 'D1', 'source_level': 'H4', 'snapshot_time': '2026-03-04T00:00:00+00:00', 'account_snapshot_written': 4, 'position_snapshot_written': 6}
+[2026-03-04 14:56:24,318: INFO/MainProcess] Task snapshot.tasks.task_aggregate_mon1_snapshots[17ab496a-0382-4a2e-9f78-d5b6539a959c] received
+[2026-03-04 14:56:24,433: INFO/MainProcess] Task snapshot.tasks.task_aggregate_mon1_snapshots[17ab496a-0382-4a2e-9f78-d5b6539a959c] succeeded in 0.11522889998741448s: {'snapshot_level': 'MON1', 'source_level': 'none', 'snapshot_time': '2026-03-01T00:00:00+00:00', 'account_snapshot_written': 0, 'position_snapshot_written': 0}
+[2026-03-04 14:56:26,322: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[e67587f5-83e6-478a-b4e0-f0456e7e78c0] received
+[2026-03-04 14:56:26,420: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[e67587f5-83e6-478a-b4e0-f0456e7e78c0] succeeded in 0.09805450000567362s: {'snapshot_level': 'H4', 'source_level': 'none', 'snapshot_time': '2026-03-04T04:00:00+00:00', 'account_snapshot_written': 0, 'position_snapshot_written': 0}
+[2026-03-04 14:56:33,305: INFO/MainProcess] Task snapshot.tasks.task_aggregate_d1_snapshots[971a1c21-d17c-426f-b847-3718641c74ad] received
+[2026-03-04 14:56:33,523: INFO/MainProcess] Task snapshot.tasks.task_aggregate_d1_snapshots[971a1c21-d17c-426f-b847-3718641c74ad] succeeded in 0.21836230001645163s: {'snapshot_level': 'D1', 'source_level': 'H4', 'snapshot_time': '2026-03-04T00:00:00+00:00', 'account_snapshot_written': 4, 'position_snapshot_written': 6}
+[2026-03-04 14:56:39,322: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[feeaa215-9172-401f-bb79-dc95d1b6b716] received
+[2026-03-04 14:56:39,493: INFO/MainProcess] Task snapshot.tasks.task_aggregate_h4_snapshots[feeaa215-9172-401f-bb79-dc95d1b6b716] succeeded in 0.17059389996575192s: {'snapshot_level': 'H4', 'source_level': 'none', 'snapshot_time': '2026-03-04T04:00:00+00:00', 'account_snapshot_written': 0, 'position_snapshot_written': 0}
+[2026-03-04 14:56:43,318: INFO/MainProcess] Task snapshot.tasks.task_aggregate_mon1_snapshots[0ac954a5-36cd-4acf-a84c-5b83de3e16aa] received
+[2026-03-04 14:56:43,477: INFO/MainProcess] Task snapshot.tasks.task_aggregate_mon1_snapshots[0ac954a5-36cd-4acf-a84c-5b83de3e16aa] succeeded in 0.15886930003762245s: {'snapshot_level': 'MON1', 'source_level': 'none', 'snapshot_time': '2026-03-01T00:00:00+00:00', 'account_snapshot_written': 0, 'position_snapshot_written': 0}
