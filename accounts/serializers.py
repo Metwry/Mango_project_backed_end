@@ -2,6 +2,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
 from .models import Accounts, Transaction
+from snapshot.models import AccountSnapshot
 
 
 class AccountSerializer(serializers.ModelSerializer):
@@ -20,14 +21,29 @@ class AccountSerializer(serializers.ModelSerializer):
             )
         ]
 
+    def _latest_snapshot_payload(self, account_id: int):
+        cache = self.context.setdefault("_investment_snapshot_cache", {})
+        if account_id not in cache:
+            cache[account_id] = (
+                AccountSnapshot.objects
+                .filter(account_id=account_id)
+                .order_by("-snapshot_time", "-id")
+                .values("balance_native")
+                .first()
+            )
+        return cache[account_id]
+
     def validate(self, attrs):
         attrs = super().validate(attrs)
         instance = getattr(self, "instance", None)
 
         if instance is None:
             account_type = attrs.get("type")
+            account_name = str(attrs.get("name") or "").strip()
+            if account_type == Accounts.AccountType.INVESTMENT and account_name == "投资账户":
+                raise serializers.ValidationError({"message": "投资账户由系统自动维护，不能手动创建。"})
             if account_type == Accounts.AccountType.INVESTMENT:
-                raise serializers.ValidationError({"type": "投资账户由系统自动维护，不能手动创建。"})
+                raise serializers.ValidationError({"message": "投资账户由系统自动维护，不能手动创建。"})
             return attrs
 
         if instance.type != Accounts.AccountType.INVESTMENT:
@@ -44,6 +60,16 @@ class AccountSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+    def to_representation(self, instance):
+        payload = super().to_representation(instance)
+        if instance.type != Accounts.AccountType.INVESTMENT:
+            return payload
+
+        latest = self._latest_snapshot_payload(instance.id)
+        if latest and latest.get("balance_native") is not None:
+            payload["balance"] = str(latest["balance_native"])
+        return payload
 
 class TransactionSerializer(serializers.ModelSerializer):
     account_name = serializers.CharField(source="account.name", read_only=True)

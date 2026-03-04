@@ -1,4 +1,4 @@
-from .account_service import INVESTMENT_ACCOUNT_NAME, calculate_investment_account_balance, sync_investment_account_for_user
+from .account_service import INVESTMENT_ACCOUNT_NAME, sync_investment_account_for_user
 from .trade_service import (
     POSITION_ZERO,
     ConflictError,
@@ -11,7 +11,6 @@ from .query_service import build_position_list_queryset, query_investment_histor
 
 __all__ = [
     "INVESTMENT_ACCOUNT_NAME",
-    "calculate_investment_account_balance",
     "sync_investment_account_for_user",
     "POSITION_ZERO",
     "ConflictError",

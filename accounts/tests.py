@@ -14,6 +14,7 @@ from investment.models import Position
 from market.models import Instrument
 from accounts.services.quote_fetcher import _to_billion_amount
 from market.services.cache_keys import USD_EXCHANGE_RATES_KEY
+from snapshot.models import AccountSnapshot, SnapshotDataStatus, SnapshotLevel
 
 
 class QuoteFetcherUnitTests(SimpleTestCase):
@@ -76,6 +77,20 @@ class AccountsBasicApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(len(resp.data), 1)
         self.assertEqual(resp.data[0]["name"], "Cash CNY")
+
+    def test_create_investment_account_is_forbidden(self):
+        resp = self.client.post(
+            self.account_endpoint,
+            {
+                "name": "投资账户",
+                "type": Accounts.AccountType.INVESTMENT,
+                "currency": "USD",
+                "balance": "0.00",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.data.get("message"), "投资账户由系统自动维护，不能手动创建。")
 
     def test_transaction_create_and_reverse(self):
         create_resp = self.client.post(
@@ -309,10 +324,35 @@ class AccountsBasicApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("message", resp.data)
         self.assertIn("currency", resp.data)
         self.account.refresh_from_db()
         self.assertEqual(self.account.currency, "CNY")
         self.assertEqual(self.account.balance, Decimal("1000.00"))
+
+    def test_investment_account_balance_prefers_latest_snapshot(self):
+        investment_account = Accounts.objects.create(
+            user=self.user,
+            name="投资账户",
+            type=Accounts.AccountType.INVESTMENT,
+            currency="USD",
+            balance=Decimal("9999.99"),
+            status=Accounts.Status.ACTIVE,
+        )
+        AccountSnapshot.objects.create(
+            account=investment_account,
+            snapshot_level=SnapshotLevel.M15,
+            snapshot_time="2026-03-04T00:00:00Z",
+            account_currency="USD",
+            balance_native=Decimal("1234.56"),
+            balance_usd=Decimal("1234.56"),
+            data_status=SnapshotDataStatus.OK,
+        )
+
+        resp = self.client.get(self.account_endpoint)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        target = next(item for item in resp.data if item["id"] == investment_account.id)
+        self.assertEqual(target["balance"], "1234.560000")
 
     def test_delete_normal_account_archives_and_keeps_transactions(self):
         tx_resp = self.client.post(
