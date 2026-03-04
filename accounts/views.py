@@ -1,15 +1,25 @@
 from django_filters import rest_framework as filters
-from django.db.models.deletion import ProtectedError
 from rest_framework import filters as drf_filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Accounts, Transaction
+from .models import Transaction
 from .pagination import TransactionPagination
-from .services import reverse_transaction
-from .serializers import AccountSerializer, TransactionSerializer
+from .services import (
+    archive_account,
+    build_transaction_queryset,
+    create_account_for_user,
+    create_transaction_for_user,
+    delete_single_transaction,
+    delete_transactions_by_activity,
+    get_user_accounts_queryset,
+    reverse_transaction,
+    should_include_archived,
+    update_account_from_serializer,
+)
+from .serializers import AccountSerializer, TransactionDeleteRequestSerializer, TransactionSerializer
 
 
 class AccountViewSet(viewsets.ModelViewSet):
@@ -17,33 +27,20 @@ class AccountViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Accounts.objects.filter(user=self.request.user).order_by("-balance")
+        include_archived = should_include_archived(self.request.query_params.get("include_archived"))
+        return get_user_accounts_queryset(user=self.request.user, include_archived=include_archived)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        create_account_for_user(serializer=serializer, user=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.instance = update_account_from_serializer(serializer=serializer)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        try:
-            self.perform_destroy(instance)
-        except ProtectedError as exc:
-            model_counts = {}
-            for obj in exc.protected_objects:
-                model_label = obj._meta.label
-                model_counts[model_label] = model_counts.get(model_label, 0) + 1
-
-            details = [
-                {"model": model, "count": count}
-                for model, count in sorted(model_counts.items())
-            ]
-            return Response(
-                {
-                    "code": "account_delete_blocked",
-                    "message": "账户存在关联数据，无法删除，请先处理关联记录后再重试。",
-                    "details": details,
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
+        conflict_payload = archive_account(account=instance, user=request.user)
+        if conflict_payload:
+            return Response(conflict_payload, status=status.HTTP_409_CONFLICT)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -71,27 +68,60 @@ class TransactionViewSet(viewsets.ModelViewSet):
     ordering_fields = ["amount", "created_at", "add_date"]
 
     def get_queryset(self):
-        qs = (
-            Transaction.objects
-            .select_related("account")
-            .filter(user=self.request.user)
-            .order_by("-add_date", "-id")
+        return build_transaction_queryset(
+            user=self.request.user,
+            action=self.action,
+            query_params=self.request.query_params,
         )
 
-        if self.action == "list":
-            qs = qs.filter(reversal_of__isnull=True)
-            if not self.request.query_params.get("include_reversed"):
-                qs = qs.filter(reversed_at__isnull=True)
-
-        return qs
-
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        create_transaction_for_user(serializer=serializer, user=self.request.user)
 
     def destroy(self, request, *args, **kwargs):
-        raise ValidationError("不允许删除交易记录，请使用撤销功能。")
+        result = delete_single_transaction(user=request.user, tx_id=int(kwargs.get("pk")))
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="delete")
+    def delete_records(self, request):
+        serializer = TransactionDeleteRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        params = serializer.validated_data
+
+        if params["mode"] == "single":
+            result = delete_single_transaction(
+                user=request.user,
+                tx_id=params["transaction_id"],
+            )
+            return Response(result, status=status.HTTP_200_OK)
+
+        result = delete_transactions_by_activity(
+            user=request.user,
+            activity_type=params["activity_type"],
+        )
+        return Response(result, status=status.HTTP_200_OK)
+
+    @staticmethod
+    def _error_message(exc: ValidationError) -> str:
+        detail = exc.detail
+        if isinstance(detail, list):
+            return str(detail[0]) if detail else "请求失败"
+        if isinstance(detail, dict):
+            first_value = next(iter(detail.values()), None)
+            if isinstance(first_value, list):
+                return str(first_value[0]) if first_value else "请求失败"
+            if first_value is not None:
+                return str(first_value)
+            return "请求失败"
+        return str(detail)
 
     @action(detail=True, methods=["post"])
     def reverse(self, request, pk=None):
-        reverse_tx = reverse_transaction(user=request.user, tx_id=int(pk))
+        try:
+            reverse_tx = reverse_transaction(user=request.user, tx_id=int(pk))
+        except (TypeError, ValueError):
+            return Response({"message": "交易ID格式不正确。"}, status=status.HTTP_400_BAD_REQUEST)
+        except Transaction.DoesNotExist:
+            return Response({"message": "交易不存在或无权限。"}, status=status.HTTP_404_NOT_FOUND)
+        except ValidationError as exc:
+            return Response({"message": self._error_message(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(reverse_tx).data, status=status.HTTP_201_CREATED)

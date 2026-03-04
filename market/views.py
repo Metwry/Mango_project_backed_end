@@ -20,6 +20,7 @@ from .services import (
     build_user_markets_snapshot,
     delete_watchlist_symbol,
     get_fx_rates,
+    search_instruments,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,11 @@ class MarketInstrumentSearchView(APIView):
         if not params.validated_data["query"]:
             return Response({"results": []}, status=status.HTTP_200_OK)
 
-        qs = params.build_queryset()
+        qs = search_instruments(
+            query=params.validated_data["query"],
+            query_upper=params.validated_data["query_upper"],
+            limit=params.validated_data["limit"],
+        )
         serializer = InstrumentSearchItemSerializer(qs, many=True)
         return Response({"results": serializer.data}, status=status.HTTP_200_OK)
 

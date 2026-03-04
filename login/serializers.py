@@ -1,14 +1,9 @@
-from django.db import IntegrityError
 from rest_framework import serializers
 from shared.exceptions import LoginFailedError
 
 from .services import (
     authenticate_email_password,
-    build_login_payload,
-    clear_register_email_code,
-    create_user_by_email,
     ensure_email_not_registered,
-    send_register_email_code,
     verify_register_email_code,
 )
 
@@ -30,9 +25,6 @@ class LoginSerializer(serializers.Serializer):
         attrs["user"] = user
         return attrs
 
-    def create(self, validated_data):
-        return build_login_payload(validated_data["user"])
-
 
 class SendRegisterEmailCodeSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -44,10 +36,6 @@ class SendRegisterEmailCodeSerializer(serializers.Serializer):
         except ValueError as exc:
             raise serializers.ValidationError(str(exc))
         return email
-
-    def create(self, validated_data):
-        send_register_email_code(validated_data["email"])
-        return {"message": "验证码已发送"}
 
 
 class EmailRegisterSerializer(serializers.Serializer):
@@ -73,18 +61,3 @@ class EmailRegisterSerializer(serializers.Serializer):
             raise serializers.ValidationError({"code": str(exc)})
 
         return attrs
-
-    def create(self, validated_data):
-        email = validated_data["email"]
-        password = validated_data["password"]
-        try:
-            user = create_user_by_email(email=email, password=password)
-        except IntegrityError:
-            raise serializers.ValidationError({"email": "该邮箱已注册"})
-        clear_register_email_code(email)
-
-        return {
-            "id": user.id,
-            "email": user.email,
-            "username": user.username,
-        }

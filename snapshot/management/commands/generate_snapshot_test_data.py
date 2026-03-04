@@ -11,19 +11,14 @@ from django.utils import timezone
 from accounts.models import Accounts
 from investment.models import Position
 from market.services.fx_rate_service import get_fx_rates
+from shared.constants import market_currency
+from shared.time import floor_bucket
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
 from snapshot.services.snapshot_service import cleanup_expired_snapshots
 
 PREC = Decimal("0.000001")
 FX_PREC = Decimal("0.0000000001")
 ZERO = Decimal("0")
-MARKET_TO_CURRENCY = {
-    "US": "USD",
-    "CN": "CNY",
-    "HK": "HKD",
-    "CRYPTO": "USD",
-    "FX": "USD",
-}
 VOL_BY_LEVEL = {
     SnapshotLevel.M15: 0.015,
     SnapshotLevel.H4: 0.03,
@@ -41,16 +36,7 @@ def q_fx(value: Decimal) -> Decimal:
 
 
 def floor_ts(dt, level: str):
-    dt = dt.astimezone(dt_timezone.utc).replace(second=0, microsecond=0)
-    if level == SnapshotLevel.M15:
-        return dt.replace(minute=(dt.minute // 15) * 15)
-    if level == SnapshotLevel.H4:
-        return dt.replace(hour=(dt.hour // 4) * 4, minute=0)
-    if level == SnapshotLevel.D1:
-        return dt.replace(hour=0, minute=0)
-    if level == SnapshotLevel.MON1:
-        return dt.replace(day=1, hour=0, minute=0)
-    return dt
+    return floor_bucket(dt, level)
 
 
 def iter_times(start_dt, end_dt, level: str):
@@ -115,7 +101,7 @@ def expected_position_ccy(position: Position) -> str:
     base = str(position.instrument.base_currency or "").strip().upper()
     if base:
         return base
-    return MARKET_TO_CURRENCY.get(str(position.instrument.market or "").strip().upper(), "USD")
+    return market_currency(position.instrument.market, "USD")
 
 
 class Command(BaseCommand):

@@ -10,6 +10,8 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from accounts.models import Accounts, Transaction
+from investment.models import Position
+from market.models import Instrument
 from accounts.services.quote_fetcher import _to_billion_amount
 from market.services.cache_keys import USD_EXCHANGE_RATES_KEY
 
@@ -99,6 +101,159 @@ class AccountsBasicApiTests(APITestCase):
         self.assertEqual(self.account.balance, Decimal("1000.00"))
         self.assertEqual(Transaction.objects.count(), 2)
 
+    def test_transaction_activity_type_filters_manual_investment_and_reversed(self):
+        manual_reversed_resp = self.client.post(
+            self.tx_endpoint,
+            {
+                "counterparty": "午餐",
+                "amount": "-50.00",
+                "category_name": "餐饮",
+                "account": self.account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(manual_reversed_resp.status_code, status.HTTP_201_CREATED)
+        manual_reversed_id = manual_reversed_resp.data["id"]
+
+        manual_normal_resp = self.client.post(
+            self.tx_endpoint,
+            {
+                "counterparty": "地铁",
+                "amount": "-10.00",
+                "category_name": "交通",
+                "account": self.account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(manual_normal_resp.status_code, status.HTTP_201_CREATED)
+        manual_normal_id = manual_normal_resp.data["id"]
+
+        reverse_resp = self.client.post(f"{self.tx_endpoint}{manual_reversed_id}/reverse/", {}, format="json")
+        self.assertEqual(reverse_resp.status_code, status.HTTP_201_CREATED)
+
+        investment_tx = Transaction.objects.create(
+            user=self.user,
+            account=self.account,
+            counterparty="Apple Inc.",
+            amount=Decimal("-100.00"),
+            category_name="买入",
+            source=Transaction.Source.INVESTMENT,
+        )
+
+        manual_list_resp = self.client.get(f"{self.tx_endpoint}?activity_type=manual")
+        self.assertEqual(manual_list_resp.status_code, status.HTTP_200_OK)
+        manual_ids = {item["id"] for item in manual_list_resp.data["results"]}
+        self.assertEqual(manual_ids, {manual_normal_id})
+
+        investment_list_resp = self.client.get(f"{self.tx_endpoint}?activity_type=investment")
+        self.assertEqual(investment_list_resp.status_code, status.HTTP_200_OK)
+        investment_ids = {item["id"] for item in investment_list_resp.data["results"]}
+        self.assertEqual(investment_ids, {investment_tx.id})
+
+        reversed_list_resp = self.client.get(f"{self.tx_endpoint}?activity_type=reversed")
+        self.assertEqual(reversed_list_resp.status_code, status.HTTP_200_OK)
+        reversed_ids = {item["id"] for item in reversed_list_resp.data["results"]}
+        self.assertEqual(reversed_ids, {manual_reversed_id})
+
+    def test_transaction_activity_type_validation(self):
+        resp = self.client.get(f"{self.tx_endpoint}?activity_type=unknown")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("activity_type", resp.data)
+
+    def test_delete_single_transaction_endpoint(self):
+        create_resp = self.client.post(
+            self.tx_endpoint,
+            {
+                "counterparty": "午餐",
+                "amount": "-50.00",
+                "category_name": "餐饮",
+                "account": self.account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+        tx_id = create_resp.data["id"]
+
+        delete_resp = self.client.post(
+            f"{self.tx_endpoint}delete/",
+            {"mode": "single", "transaction_id": tx_id},
+            format="json",
+        )
+        self.assertEqual(delete_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(delete_resp.data["visible_deleted"], 1)
+
+        self.account.refresh_from_db()
+        self.assertEqual(self.account.balance, Decimal("1000.00"))
+        self.assertFalse(Transaction.objects.filter(id=tx_id).exists())
+
+    def test_delete_activity_transactions_endpoint(self):
+        manual_resp = self.client.post(
+            self.tx_endpoint,
+            {
+                "counterparty": "地铁",
+                "amount": "-10.00",
+                "category_name": "交通",
+                "account": self.account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(manual_resp.status_code, status.HTTP_201_CREATED)
+        manual_id = manual_resp.data["id"]
+
+        reversed_resp = self.client.post(
+            self.tx_endpoint,
+            {
+                "counterparty": "午餐",
+                "amount": "-50.00",
+                "category_name": "餐饮",
+                "account": self.account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(reversed_resp.status_code, status.HTTP_201_CREATED)
+        reversed_id = reversed_resp.data["id"]
+        reverse_action_resp = self.client.post(f"{self.tx_endpoint}{reversed_id}/reverse/", {}, format="json")
+        self.assertEqual(reverse_action_resp.status_code, status.HTTP_201_CREATED)
+
+        investment_tx = Transaction.objects.create(
+            user=self.user,
+            account=self.account,
+            counterparty="Apple Inc.",
+            amount=Decimal("-100.00"),
+            category_name="买入",
+            source=Transaction.Source.INVESTMENT,
+        )
+
+        delete_investment_resp = self.client.post(
+            f"{self.tx_endpoint}delete/",
+            {"mode": "activity", "activity_type": "investment"},
+            format="json",
+        )
+        self.assertEqual(delete_investment_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(delete_investment_resp.data["visible_deleted"], 1)
+        self.assertFalse(Transaction.objects.filter(id=investment_tx.id).exists())
+
+        delete_reversed_resp = self.client.post(
+            f"{self.tx_endpoint}delete/",
+            {"mode": "activity", "activity_type": "reversed"},
+            format="json",
+        )
+        self.assertEqual(delete_reversed_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(delete_reversed_resp.data["visible_deleted"], 1)
+        self.assertFalse(Transaction.objects.filter(id=reversed_id).exists())
+
+        delete_manual_resp = self.client.post(
+            f"{self.tx_endpoint}delete/",
+            {"mode": "activity", "activity_type": "manual"},
+            format="json",
+        )
+        self.assertEqual(delete_manual_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(delete_manual_resp.data["visible_deleted"], 1)
+        self.assertFalse(Transaction.objects.filter(id=manual_id).exists())
+
+        self.account.refresh_from_db()
+        self.assertEqual(self.account.balance, Decimal("1000.00"))
+
     def test_transaction_create_rejects_investment_account(self):
         investment_account = Accounts.objects.create(
             user=self.user,
@@ -158,6 +313,84 @@ class AccountsBasicApiTests(APITestCase):
         self.account.refresh_from_db()
         self.assertEqual(self.account.currency, "CNY")
         self.assertEqual(self.account.balance, Decimal("1000.00"))
+
+    def test_delete_normal_account_archives_and_keeps_transactions(self):
+        tx_resp = self.client.post(
+            self.tx_endpoint,
+            {
+                "counterparty": "地铁",
+                "amount": "-10.00",
+                "category_name": "交通",
+                "account": self.account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(tx_resp.status_code, status.HTTP_201_CREATED)
+
+        delete_resp = self.client.delete(f"{self.account_endpoint}{self.account.id}/")
+        self.assertEqual(delete_resp.status_code, status.HTTP_204_NO_CONTENT)
+
+        self.account.refresh_from_db()
+        self.assertEqual(self.account.status, Accounts.Status.ARCHIVED)
+        self.assertEqual(Transaction.objects.filter(account=self.account).count(), 1)
+
+        list_resp = self.client.get(self.account_endpoint)
+        self.assertEqual(list_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_resp.data), 0)
+
+        list_with_archived_resp = self.client.get(f"{self.account_endpoint}?include_archived=1")
+        self.assertEqual(list_with_archived_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_with_archived_resp.data), 1)
+        self.assertEqual(list_with_archived_resp.data[0]["status"], Accounts.Status.ARCHIVED)
+
+    def test_delete_investment_account_blocked_when_has_positions(self):
+        investment_account = Accounts.objects.create(
+            user=self.user,
+            name="投资账户",
+            type=Accounts.AccountType.INVESTMENT,
+            currency="USD",
+            balance=Decimal("123.45"),
+            status=Accounts.Status.ACTIVE,
+        )
+        instrument = Instrument.objects.create(
+            symbol="AAPL.US",
+            short_code="AAPL",
+            name="Apple Inc.",
+            market=Instrument.Market.US,
+            asset_class=Instrument.AssetClass.STOCK,
+            base_currency="USD",
+            is_active=True,
+        )
+        Position.objects.create(
+            user=self.user,
+            instrument=instrument,
+            quantity=Decimal("1.000000"),
+            avg_cost=Decimal("100.000000"),
+            cost_total=Decimal("100.000000"),
+        )
+
+        delete_resp = self.client.delete(f"{self.account_endpoint}{investment_account.id}/")
+        self.assertEqual(delete_resp.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(delete_resp.data["code"], "investment_account_delete_blocked")
+
+        investment_account.refresh_from_db()
+        self.assertEqual(investment_account.status, Accounts.Status.ACTIVE)
+
+    def test_delete_investment_account_without_positions_archives(self):
+        investment_account = Accounts.objects.create(
+            user=self.user,
+            name="投资账户",
+            type=Accounts.AccountType.INVESTMENT,
+            currency="USD",
+            balance=Decimal("0.00"),
+            status=Accounts.Status.ACTIVE,
+        )
+
+        delete_resp = self.client.delete(f"{self.account_endpoint}{investment_account.id}/")
+        self.assertEqual(delete_resp.status_code, status.HTTP_204_NO_CONTENT)
+
+        investment_account.refresh_from_db()
+        self.assertEqual(investment_account.status, Accounts.Status.ARCHIVED)
 
 
 class AccountsComplexApiTests(TransactionTestCase):

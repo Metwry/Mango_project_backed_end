@@ -1,9 +1,8 @@
 from datetime import timedelta
-from datetime import timezone as dt_timezone
 
-from django.utils import timezone
 from rest_framework import serializers
 
+from shared.utils import normalize_datetime_to_utc
 from snapshot.models import SnapshotLevel
 
 
@@ -15,10 +14,7 @@ class SnapshotQueryBaseSerializer(serializers.Serializer):
 
     @staticmethod
     def _normalize_datetime(value):
-        dt = value
-        if timezone.is_naive(dt):
-            dt = timezone.make_aware(dt, timezone.get_current_timezone())
-        return dt.astimezone(dt_timezone.utc)
+        return normalize_datetime_to_utc(value)
 
     def validate(self, attrs):
         start_time = self._normalize_datetime(attrs["start_time"])

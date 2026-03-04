@@ -1,16 +1,10 @@
 from decimal import Decimal
 
-from django import VERSION as DJANGO_VERSION
 from django.db import models
 from django.db.models import Q
 
 from accounts.models import Currency
-
-
-def _check_constraint(*, expr: Q, name: str) -> models.CheckConstraint:
-    if DJANGO_VERSION >= (5, 1):
-        return models.CheckConstraint(condition=expr, name=name)
-    return models.CheckConstraint(check=expr, name=name)
+from shared.db import check_constraint
 
 
 class SnapshotDataStatus(models.TextChoices):
@@ -46,7 +40,7 @@ class AccountSnapshot(models.Model):
         db_table = "snapshot_account_snapshot"
         constraints = [
             models.UniqueConstraint(fields=["account", "snapshot_level", "snapshot_time"], name="uniq_snap_acc_lvl_time"),
-            _check_constraint(expr=Q(fx_rate_to_usd__isnull=True) | Q(fx_rate_to_usd__gt=0), name="snap_acc_fx_rate_null_or_gt_0"),
+            check_constraint(expr=Q(fx_rate_to_usd__isnull=True) | Q(fx_rate_to_usd__gt=0), name="snap_acc_fx_rate_null_or_gt_0"),
         ]
         indexes = [
             models.Index(fields=["snapshot_level", "snapshot_time"], name="snap_acc_lvl_time_idx"),
@@ -87,25 +81,25 @@ class PositionSnapshot(models.Model):
                 fields=["account", "instrument", "snapshot_level", "snapshot_time"],
                 name="uniq_snap_pos_inst_lvl_time",
             ),
-            _check_constraint(expr=Q(quantity__gte=0), name="snap_pos_quantity_gte_0"),
-            _check_constraint(expr=Q(avg_cost__gte=0), name="snap_pos_avg_cost_gte_0"),
-            _check_constraint(
+            check_constraint(expr=Q(quantity__gte=0), name="snap_pos_quantity_gte_0"),
+            check_constraint(expr=Q(avg_cost__gte=0), name="snap_pos_avg_cost_gte_0"),
+            check_constraint(
                 expr=Q(market_price__isnull=True) | Q(market_price__gt=0),
                 name="snap_pos_market_price_null_or_gt_0",
             ),
-            _check_constraint(
+            check_constraint(
                 expr=Q(market_value__isnull=True) | Q(market_value__gte=0),
                 name="snap_pos_market_value_null_or_gte_0",
             ),
-            _check_constraint(
+            check_constraint(
                 expr=Q(market_value_usd__isnull=True) | Q(market_value_usd__gte=0),
                 name="snap_pos_market_usd_null_or_gte_0",
             ),
-            _check_constraint(
+            check_constraint(
                 expr=Q(fx_rate_to_usd__isnull=True) | Q(fx_rate_to_usd__gt=0),
                 name="snap_pos_fx_rate_null_or_gt_0",
             ),
-            _check_constraint(
+            check_constraint(
                 expr=(
                     Q(data_status=SnapshotDataStatus.OK, market_price__isnull=False, market_value__isnull=False)
                     | Q(data_status=SnapshotDataStatus.QUOTE_MISSING)

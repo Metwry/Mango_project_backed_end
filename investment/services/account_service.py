@@ -5,20 +5,16 @@ from django.db import IntegrityError, transaction
 
 from accounts.models import Accounts, Currency
 from market.services.cache_keys import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
-from shared.utils import normalize_code, quantize_decimal, strip_market_suffix, to_decimal, safe_payload_data
+from shared.constants import market_currency
+from shared.fx import normalize_usd_rates
+from shared.utils import normalize_code, quantize_decimal, resolve_short_code, to_decimal, safe_payload_data
 
 from ..models import Position
 
 INVESTMENT_ACCOUNT_NAME = "投资账户"
 POSITION_ZERO = Decimal("0")
 ACCOUNT_PRECISION = Decimal("0.01")
-MARKET_TO_CURRENCY = {
-    "US": "USD",
-    "CN": "CNY",
-    "HK": "HKD",
-    "CRYPTO": "USD",
-    "FX": "USD",
-}
+
 def _quantize_account(value: Decimal) -> Decimal:
     return quantize_decimal(value, ACCOUNT_PRECISION)
 
@@ -36,7 +32,7 @@ def _build_quote_index() -> dict[tuple[str, str], Decimal]:
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            short_code = normalize_code(row.get("short_code")) or strip_market_suffix(row.get("symbol"))
+            short_code = resolve_short_code(row.get("short_code"), row.get("symbol"))
             if not short_code:
                 continue
             price = to_decimal(row.get("price"))
@@ -49,20 +45,8 @@ def _build_quote_index() -> dict[tuple[str, str], Decimal]:
 
 def _load_usd_rates() -> dict[str, Decimal]:
     payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}
-    raw_rates = payload.get("rates") if isinstance(payload, dict) else None
-    rates: dict[str, Decimal] = {"USD": Decimal("1")}
-    if not isinstance(raw_rates, dict):
-        return rates
-
-    for code, raw_value in raw_rates.items():
-        ccy = normalize_code(code)
-        value = to_decimal(raw_value)
-        if not ccy or value is None or value <= 0:
-            continue
-        rates[ccy] = value
-
-    rates["USD"] = Decimal("1")
-    return rates
+    raw_rates = payload.get("rates") if isinstance(payload, dict) else {}
+    return normalize_usd_rates(raw_rates)
 
 
 def _expected_currency_for_position(position: Position) -> str:
@@ -70,7 +54,7 @@ def _expected_currency_for_position(position: Position) -> str:
     base_currency = normalize_code(getattr(instrument, "base_currency", ""))
     if base_currency:
         return base_currency
-    return MARKET_TO_CURRENCY.get(normalize_code(instrument.market), "")
+    return market_currency(instrument.market, "")
 
 
 def _convert_currency(amount: Decimal, from_currency: str, to_currency: str, usd_rates: dict[str, Decimal]) -> Decimal:
@@ -116,7 +100,7 @@ def calculate_investment_account_balance(*, user, currency: str) -> Decimal:
             continue
 
         market = normalize_code(position.instrument.market)
-        short_code = normalize_code(position.instrument.short_code) or strip_market_suffix(position.instrument.symbol)
+        short_code = resolve_short_code(position.instrument.short_code, position.instrument.symbol)
         latest_price = quote_index.get((market, short_code))
         if latest_price is None:
             latest_price = position.avg_cost or POSITION_ZERO
@@ -129,6 +113,13 @@ def calculate_investment_account_balance(*, user, currency: str) -> Decimal:
     if total_value <= 0:
         return POSITION_ZERO
     return _quantize_account(total_value)
+
+
+def _archive_account(account: Accounts) -> None:
+    if account.status == Accounts.Status.ARCHIVED:
+        return
+    account.status = Accounts.Status.ARCHIVED
+    account.save(update_fields=["status", "updated_at"])
 
 
 def sync_investment_account_for_user(*, user, target_currency: str | None = None) -> Accounts | None:
@@ -144,17 +135,26 @@ def sync_investment_account_for_user(*, user, target_currency: str | None = None
             .order_by("id")
         )
         accounts = list(account_qs)
-        account = accounts[0] if accounts else None
-        for duplicate in accounts[1:]:
-            duplicate.delete()
+        account = None
+        for candidate in accounts:
+            if candidate.status != Accounts.Status.ARCHIVED:
+                account = candidate
+                break
+        if account is None and accounts:
+            account = accounts[0]
+
+        for duplicate in accounts:
+            if account is None or duplicate.id == account.id:
+                continue
+            _archive_account(duplicate)
 
         has_positions = Position.objects.filter(user=user, quantity__gt=0).exists()
         if not has_positions:
             if account is not None:
-                account.delete()
+                _archive_account(account)
             return None
 
-        desired_currency = normalize_code(target_currency) or (account.currency if account else Currency.CNY)
+        desired_currency = normalize_code(target_currency) or (normalize_code(account.currency) if account else Currency.CNY)
         if account is None:
             try:
                 account = Accounts.objects.create(
@@ -181,6 +181,10 @@ def sync_investment_account_for_user(*, user, target_currency: str | None = None
                     raise
 
         update_fields: list[str] = []
+        if account.status != Accounts.Status.ACTIVE:
+            account.status = Accounts.Status.ACTIVE
+            update_fields.append("status")
+
         if account.currency != desired_currency:
             account.currency = desired_currency
             update_fields.append("currency")

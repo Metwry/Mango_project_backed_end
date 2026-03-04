@@ -1,15 +1,12 @@
 from decimal import Decimal
 
 from rest_framework import serializers
-from rest_framework.exceptions import PermissionDenied
 
-from .models import Position
+from shared.utils import normalize_datetime_to_utc, quantize_decimal, trim_decimal_str
+
+from .models import InvestmentRecord, Position
 from .services import (
     POSITION_ZERO,
-    delete_zero_position,
-    execute_buy,
-    execute_sell,
-    trim_decimal_str,
 )
 
 
@@ -28,38 +25,13 @@ class InvestmentTradeBaseSerializer(serializers.Serializer):
     cash_account_id = serializers.IntegerField(min_value=1)
     trade_at = serializers.DateTimeField(required=False)
 
-    def _get_request_user(self):
-        request = self.context.get("request")
-        user = getattr(request, "user", None)
-        if user is None or not user.is_authenticated:
-            raise PermissionDenied("未登录")
-        return user
-
 
 class InvestmentBuySerializer(InvestmentTradeBaseSerializer):
-    def create(self, validated_data):
-        user = self._get_request_user()
-        return execute_buy(
-            user=user,
-            instrument_id=validated_data["instrument_id"],
-            quantity=validated_data["quantity"],
-            price=validated_data["price"],
-            cash_account_id=validated_data["cash_account_id"],
-            trade_at=validated_data.get("trade_at"),
-        )
+    pass
 
 
 class InvestmentSellSerializer(InvestmentTradeBaseSerializer):
-    def create(self, validated_data):
-        user = self._get_request_user()
-        return execute_sell(
-            user=user,
-            instrument_id=validated_data["instrument_id"],
-            quantity=validated_data["quantity"],
-            price=validated_data["price"],
-            cash_account_id=validated_data["cash_account_id"],
-            trade_at=validated_data.get("trade_at"),
-        )
+    pass
 
 
 class PositionListItemSerializer(serializers.ModelSerializer):
@@ -97,17 +69,68 @@ class PositionListItemSerializer(serializers.ModelSerializer):
 
 
 class PositionDeleteSerializer(serializers.Serializer):
-    def save(self, **kwargs):
-        request = self.context.get("request")
-        user = getattr(request, "user", None)
-        if user is None or not user.is_authenticated:
-            raise PermissionDenied("未登录")
+    instrument_id = serializers.IntegerField(min_value=1)
 
-        instrument_id = self.context.get("instrument_id")
-        if instrument_id is None:
-            raise serializers.ValidationError("instrument_id 不能为空")
 
-        return delete_zero_position(
-            user=user,
-            instrument_id=instrument_id,
-        )
+class InvestmentHistoryQuerySerializer(serializers.Serializer):
+    account_id = serializers.IntegerField(required=False, min_value=1)
+    instrument_id = serializers.IntegerField(required=False, min_value=1)
+    side = serializers.ChoiceField(required=False, choices=InvestmentRecord.Side.choices)
+    start = serializers.DateTimeField(required=False)
+    end = serializers.DateTimeField(required=False)
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=1000, default=100)
+    offset = serializers.IntegerField(required=False, min_value=0, default=0)
+
+    @staticmethod
+    def _normalize_datetime(value):
+        return normalize_datetime_to_utc(value)
+
+    def validate(self, attrs):
+        start = attrs.get("start")
+        end = attrs.get("end")
+        if start is not None:
+            attrs["start"] = self._normalize_datetime(start)
+        if end is not None:
+            attrs["end"] = self._normalize_datetime(end)
+        if attrs.get("start") is not None and attrs.get("end") is not None and attrs["start"] > attrs["end"]:
+            raise serializers.ValidationError("start 不能晚于 end")
+        return attrs
+
+
+class InvestmentHistoryItemSerializer(serializers.ModelSerializer):
+    instrument_symbol = serializers.CharField(source="instrument.symbol", read_only=True)
+    instrument_short_code = serializers.CharField(source="instrument.short_code", read_only=True)
+    instrument_name = serializers.CharField(source="instrument.name", read_only=True)
+    cash_account_name = serializers.CharField(source="cash_account.name", read_only=True)
+    cash_account_currency = serializers.CharField(source="cash_account.currency", read_only=True)
+    cash_flow_amount = serializers.SerializerMethodField()
+    cash_transaction_id = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = InvestmentRecord
+        fields = [
+            "id",
+            "side",
+            "trade_at",
+            "instrument_id",
+            "instrument_symbol",
+            "instrument_short_code",
+            "instrument_name",
+            "quantity",
+            "price",
+            "realized_pnl",
+            "cash_account_id",
+            "cash_account_name",
+            "cash_account_currency",
+            "cash_flow_amount",
+            "cash_transaction_id",
+            "created_at",
+        ]
+
+    @staticmethod
+    def get_cash_flow_amount(obj: InvestmentRecord) -> str:
+        if obj.cash_transaction_id:
+            return trim_decimal_str(obj.cash_transaction.amount or Decimal("0"))
+        gross = quantize_decimal((obj.quantity or Decimal("0")) * (obj.price or Decimal("0")), Decimal("0.01"))
+        amount = gross if obj.side == InvestmentRecord.Side.SELL else Decimal("0") - gross
+        return trim_decimal_str(amount)

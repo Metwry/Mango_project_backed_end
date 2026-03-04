@@ -1,0 +1,6 @@
+﻿name,pid,log
+beat,40968,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\beat.log
+market_sync,36652,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\market_sync.log
+snapshot_capture,41424,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\snapshot_capture.log
+snapshot_aggregate,39384,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\snapshot_aggregate.log
+snapshot_cleanup,17352,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\snapshot_cleanup.log

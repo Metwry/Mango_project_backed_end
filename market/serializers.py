@@ -1,4 +1,3 @@
-from django.db.models import Case, IntegerField, Q, Value, When
 from rest_framework import serializers
 from shared.utils import normalize_code
 
@@ -30,34 +29,6 @@ class MarketInstrumentSearchQuerySerializer(serializers.Serializer):
             parsed = 20
         attrs["limit"] = max(1, min(parsed, 50))
         return attrs
-
-    def build_queryset(self):
-        query = self.validated_data.get("query", "")
-        if not query:
-            return Instrument.objects.none()
-
-        query_upper = self.validated_data["query_upper"]
-        limit = self.validated_data["limit"]
-
-        return (
-            Instrument.objects
-            .filter(is_active=True)
-            .filter(
-                Q(short_code__icontains=query_upper)
-                | Q(symbol__icontains=query_upper)
-                | Q(name__icontains=query)
-            )
-            .annotate(
-                priority=Case(
-                    When(short_code__iexact=query_upper, then=Value(0)),
-                    When(short_code__istartswith=query_upper, then=Value(1)),
-                    When(name__istartswith=query, then=Value(2)),
-                    default=Value(3),
-                    output_field=IntegerField(),
-                )
-            )
-            .order_by("priority", "short_code", "name")[:limit]
-        )
 
 
 class MarketLatestQuoteItemInputSerializer(serializers.Serializer):

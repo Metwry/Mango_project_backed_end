@@ -30,16 +30,51 @@ else:
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _load_dotenv_file(path: Path) -> None:
+    # Prefer python-dotenv if installed; fallback to a minimal parser.
+    try:
+        from dotenv import load_dotenv  # type: ignore
+    except Exception:
+        if not path.exists():
+            return
+        for line in path.read_text(encoding="utf-8").splitlines():
+            raw = line.strip()
+            if not raw or raw.startswith("#") or "=" not in raw:
+                continue
+            key, value = raw.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if not key:
+                continue
+            if value and len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                value = value[1:-1]
+            os.environ.setdefault(key, value)
+        return
+    load_dotenv(path)
+
+
+_load_dotenv_file(BASE_DIR / ".env")
+
+
+def _env_bool(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_csv(name: str, default: str = "") -> list[str]:
+    raw = os.getenv(name, default)
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-*p_=+200g*)n4a*f2f0=ri#v0z+0c-yi)ktvv#l5u7l9kzqt$u"
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = _env_bool("DJANGO_DEBUG", "true")
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = _env_csv("DJANGO_ALLOWED_HOSTS")
 
 
 # Application definition
@@ -105,7 +140,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 CACHES = {
     "default": {
         "BACKEND": CACHE_BACKEND,
-        "LOCATION": "redis://127.0.0.1:6379/1",  # 这里�?1 代表使用 Redis �?1 号数据库
+        "LOCATION": "redis://127.0.0.1:6379/1",  # 使用 Redis 1 号数据库
         "OPTIONS": CACHE_OPTIONS
     }
 }
@@ -117,7 +152,7 @@ INVESTMENT_QUOTE_WARMUP_ENABLED = True
 LOGO_DEV_IMAGE_BASE_URL = os.getenv("LOGO_DEV_IMAGE_BASE_URL", "https://img.logo.dev").strip().rstrip("/")
 LOGO_DEV_PUBLISHABLE_KEY = os.getenv(
     "LOGO_DEV_PUBLISHABLE_KEY",
-    os.getenv("LOGO_DEV_API_KEY", "pk_LgAIO0lqStWd7Xgj7Tx0Og"),
+    os.getenv("LOGO_DEV_API_KEY", ""),
 ).strip()
 LOGO_DOWNLOAD_DIR = os.getenv("LOGO_DOWNLOAD_DIR", str((BASE_DIR.parent / "logo_downloads").resolve())).strip()
 MARKET_CALENDAR_DIR = os.getenv("MARKET_CALENDAR_DIR", str((BASE_DIR / "data" / "market_calendars").resolve())).strip()
@@ -237,17 +272,17 @@ WSGI_APPLICATION = "mango_project.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-# 数据库配�?
+# 数据库
 DATABASES = {
     "default": {
         # "ENGINE": "django.db.backends.sqlite3",
         # "NAME": BASE_DIR / "db.sqlite3",
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'mango_project_db',
-        'USER': 'postgres',
-        'PASSWORD': '113150',
-        'HOST': '127.0.0.1',
-        'PORT': '5432',
+        'ENGINE': os.getenv("DB_ENGINE", 'django.db.backends.postgresql'),
+        'NAME': os.getenv("DB_NAME", 'mango_project_db'),
+        'USER': os.getenv("DB_USER", 'postgres'),
+        'PASSWORD': os.getenv("DB_PASSWORD", ''),
+        'HOST': os.getenv("DB_HOST", '127.0.0.1'),
+        'PORT': os.getenv("DB_PORT", '5432'),
 
     }
 }
@@ -297,15 +332,15 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # 邮箱配置
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
-EMAIL_HOST = "smtp.163.com"
-EMAIL_PORT = 465
-EMAIL_USE_SSL = True          # 465 用 SSL
-EMAIL_USE_TLS = False         # SSL 与 TLS 二选一，别同时开
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.163.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "465"))
+EMAIL_USE_SSL = _env_bool("EMAIL_USE_SSL", "true")          # 465 用 SSL
+EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", "false")         # SSL 与 TLS 二选一，别同时开
 
-EMAIL_HOST_USER = "wryto_11@163.com"
-EMAIL_HOST_PASSWORD = "SNdJu35w6fdCNYkG"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 
-DEFAULT_FROM_EMAIL = "Mango_Finance <wryto_11@163.com>"
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", f"Mango_Finance <{EMAIL_HOST_USER or 'no-reply@example.com'}>")
 
 
 # 日志配置

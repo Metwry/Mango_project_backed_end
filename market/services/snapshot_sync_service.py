@@ -1,5 +1,4 @@
 import logging
-from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Set
 
@@ -8,12 +7,11 @@ from django.utils import timezone
 
 from accounts.services import (
     USD_MAINSTREAM_CURRENCIES,
-    get_unique_instruments_from_subscriptions,
     pull_usd_exchange_rates,
     pull_watchlist_quotes,
 )
 from shared.logging_utils import log_info
-from shared.utils import normalize_code, safe_payload_data, strip_market_suffix
+from shared.utils import normalize_code, resolve_short_code, safe_payload_data
 
 from .cache_keys import (
     FX_REFRESH_INTERVAL,
@@ -23,36 +21,9 @@ from .cache_keys import (
     WATCHLIST_QUOTES_MARKET_KEY_PREFIX,
 )
 from .calendar_guard_service import resolve_due_markets
+from .subscription_query_service import global_subscription_meta_by_market
 
 logger = logging.getLogger(__name__)
-
-
-def _subscription_codes_by_market() -> Dict[str, Set[str]]:
-    grouped: Dict[str, Set[str]] = defaultdict(set)
-    for symbol, short_code, _, market, _, _ in get_unique_instruments_from_subscriptions():
-        m = str(market or "").strip().upper()
-        code = normalize_code(short_code) or strip_market_suffix(symbol)
-        if m and code:
-            grouped[m].add(code)
-    return dict(grouped)
-
-
-def _subscription_meta_by_market() -> Dict[str, Dict[str, dict]]:
-    grouped: Dict[str, Dict[str, dict]] = defaultdict(dict)
-    for symbol, short_code, name, market, logo_url, logo_color in get_unique_instruments_from_subscriptions():
-        m = str(market or "").strip().upper()
-        code = normalize_code(short_code) or strip_market_suffix(symbol)
-        if not m or not code:
-            continue
-        grouped[m][code] = {
-            "short_code": short_code or code,
-            "name": name or "",
-            "symbol": symbol or "",
-            "logo_url": logo_url or None,
-            "logo_color": logo_color or None,
-        }
-    return dict(grouped)
-
 
 def _filter_snapshot_by_subscription(
     snapshot: Dict[str, List[dict]],
@@ -68,7 +39,7 @@ def _filter_snapshot_by_subscription(
         for row in market_quotes:
             if not isinstance(row, dict):
                 continue
-            code = normalize_code(row.get("short_code")) or strip_market_suffix(row.get("symbol"))
+            code = resolve_short_code(row.get("short_code"), row.get("symbol"))
             if code in allow_codes:
                 kept.append(row)
         filtered[market] = kept
@@ -82,7 +53,7 @@ def _snapshot_code_set(rows: object) -> Set[str]:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        code = normalize_code(row.get("short_code")) or strip_market_suffix(row.get("symbol"))
+        code = resolve_short_code(row.get("short_code"), row.get("symbol"))
         if code:
             codes.add(code)
     return codes
@@ -95,15 +66,16 @@ def _index_rows_by_code(rows: object) -> Dict[str, dict]:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        code = normalize_code(row.get("short_code")) or strip_market_suffix(row.get("symbol"))
+        code = resolve_short_code(row.get("short_code"), row.get("symbol"))
         if code:
             out[code] = row
     return out
 
 
 def _build_null_quote_row(meta: dict) -> dict:
+    short_code = resolve_short_code(meta.get("short_code"), meta.get("symbol"))
     return {
-        "short_code": normalize_code(meta.get("short_code")) or strip_market_suffix(meta.get("symbol")),
+        "short_code": short_code,
         "name": str(meta.get("name") or ""),
         "logo_url": meta.get("logo_url") or None,
         "logo_color": meta.get("logo_color") or None,
@@ -207,7 +179,7 @@ def sync_watchlist_snapshot() -> dict:
     now_local = timezone.now().astimezone(UTC8)
     previous_payload = cache.get(WATCHLIST_QUOTES_KEY) or {}
     previous_data = safe_payload_data(previous_payload)
-    subscription_meta = _subscription_meta_by_market()
+    subscription_meta = global_subscription_meta_by_market()
     subscription_codes = {m: set(meta.keys()) for m, meta in subscription_meta.items()}
     missing_before = _missing_subscription_codes(previous_data, subscription_codes)
     need_bootstrap = not previous_data

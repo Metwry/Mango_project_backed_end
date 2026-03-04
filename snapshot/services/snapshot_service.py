@@ -13,6 +13,9 @@ from accounts.models import Accounts
 from investment.models import Position
 from market.services.fx_rate_service import get_fx_rates
 from market.services.quote_snapshot_service import build_quote_index, get_snapshot_payload
+from shared.constants import market_currency
+from shared.fx import normalize_usd_rates
+from shared.time import floor_bucket
 from shared.utils import normalize_code, quantize_decimal, strip_market_suffix, to_decimal
 
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
@@ -20,13 +23,6 @@ from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatu
 SNAPSHOT_PRECISION = Decimal("0.000001")
 FX_RATE_PRECISION = Decimal("0.0000000001")
 ZERO = Decimal("0")
-MARKET_TO_CURRENCY = {
-    "US": "USD",
-    "CN": "CNY",
-    "HK": "HKD",
-    "CRYPTO": "USD",
-    "FX": "USD",
-}
 RETENTION_DAYS = {
     SnapshotLevel.M15: 1,
     SnapshotLevel.H4: 30,
@@ -66,32 +62,16 @@ def _align_snapshot_time(raw_dt, level: str) -> timezone.datetime:
     dt = raw_dt or timezone.now()
     if timezone.is_naive(dt):
         dt = timezone.make_aware(dt, dt_timezone.utc)
-    dt = dt.astimezone(dt_timezone.utc).replace(second=0, microsecond=0)
-
-    if level == SnapshotLevel.M15:
-        minute = (dt.minute // 15) * 15
-        return dt.replace(minute=minute)
-    if level == SnapshotLevel.H4:
-        hour = (dt.hour // 4) * 4
-        return dt.replace(hour=hour, minute=0)
-    if level == SnapshotLevel.D1:
-        return dt.replace(hour=0, minute=0)
-    if level == SnapshotLevel.MON1:
-        return dt.replace(day=1, hour=0, minute=0)
-    return dt
+    return floor_bucket(dt, level)
 
 
 def _load_usd_rates() -> tuple[dict[str, Decimal], str | None]:
     payload = get_fx_rates("USD")
-    rates: dict[str, Decimal] = {"USD": Decimal("1")}
     raw_rates = payload.get("rates", {}) if isinstance(payload, dict) else {}
-    if isinstance(raw_rates, dict):
-        for code, raw_value in raw_rates.items():
-            ccy = normalize_code(code)
-            value = to_decimal(raw_value)
-            if not ccy or value is None or value <= 0:
-                continue
-            rates[ccy] = _q_fx(value)
+    rates: dict[str, Decimal] = {
+        code: _q_fx(value)
+        for code, value in normalize_usd_rates(raw_rates).items()
+    }
     rates["USD"] = Decimal("1")
     updated_at = payload.get("updated_at") if isinstance(payload, dict) else None
     return rates, updated_at
@@ -122,7 +102,7 @@ def _position_currency(position: Position) -> str:
     base_currency = normalize_code(getattr(instrument, "base_currency", ""))
     if base_currency:
         return base_currency
-    return MARKET_TO_CURRENCY.get(normalize_code(instrument.market), "USD")
+    return market_currency(instrument.market, "USD")
 
 
 def _quote_price(quote_row: dict[str, Any] | None) -> Decimal | None:

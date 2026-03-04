@@ -1,14 +1,9 @@
-from django import VERSION as DJANGO_VERSION
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
-
-def _check_constraint(*, expr: Q, name: str) -> models.CheckConstraint:
-    if DJANGO_VERSION >= (5, 1):
-        return models.CheckConstraint(condition=expr, name=name)
-    return models.CheckConstraint(check=expr, name=name)
+from shared.db import check_constraint
 
 
 class Instrument(models.Model):
@@ -92,7 +87,7 @@ class UserInstrumentSubscription(models.Model):
         db_table = "market_user_instrument_subscription"
         constraints = [
             models.UniqueConstraint(fields=["user", "instrument"], name="uniq_user_instrument_subscription"),
-            _check_constraint(
+            check_constraint(
                 expr=Q(from_position=True) | Q(from_watchlist=True),
                 name="sub_at_least_one_source_true",
             ),

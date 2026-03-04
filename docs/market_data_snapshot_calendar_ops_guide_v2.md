@@ -277,10 +277,11 @@ celery -A mango_project worker -n snapshot_cleanup@%h -Q snapshot_cleanup -l inf
 Windows（PowerShell）：
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start_celery_stack.ps1 -Targets all -WithBeat -FollowLogs
 powershell -ExecutionPolicy Bypass -File scripts/start_celery_stack.ps1 -Targets all -WithBeat
 powershell -ExecutionPolicy Bypass -File scripts/start_celery_stack.ps1 -Targets market_sync,snapshot_capture -WithBeat
 powershell -ExecutionPolicy Bypass -File scripts/start_celery_stack.ps1 -Targets snapshot
-powershell -ExecutionPolicy Bypass -File scripts/stop_celery_stack.ps1
+powershell -ExecutionPolicy Bypass -File scripts/stop_celery_stack.ps1 
 ```
 
 Linux/macOS（bash/zsh）：

@@ -1,17 +1,12 @@
 from decimal import Decimal
 
-from django import VERSION as DJANGO_VERSION
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
-
-def _check_constraint(*, expr: Q, name: str) -> models.CheckConstraint:
-    if DJANGO_VERSION >= (5, 1):
-        return models.CheckConstraint(condition=expr, name=name)
-    return models.CheckConstraint(check=expr, name=name)
+from shared.db import check_constraint
 
 
 class InvestmentRecord(models.Model):
@@ -44,6 +39,13 @@ class InvestmentRecord(models.Model):
         db_index=True,
         related_name="investment_records",
     )
+    cash_transaction = models.OneToOneField(
+        "accounts.Transaction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="investment_record",
+    )
 
     trade_at = models.DateTimeField(default=timezone.now, db_index=True)
 
@@ -60,16 +62,16 @@ class InvestmentRecord(models.Model):
             models.Index(fields=["user", "side", "trade_at"]),
         ]
         constraints = [
-            _check_constraint(expr=Q(quantity__gt=0), name="invrec_quantity_gt_0"),
-            _check_constraint(expr=Q(price__gt=0), name="invrec_price_gt_0"),
+            check_constraint(expr=Q(quantity__gt=0), name="invrec_quantity_gt_0"),
+            check_constraint(expr=Q(price__gt=0), name="invrec_price_gt_0"),
 
             # BUY: realized_pnl 必须为 NULL
-            _check_constraint(
+            check_constraint(
                 expr=Q(side="BUY", realized_pnl__isnull=True) | Q(side="SELL"),
                 name="invrec_buy_realized_pnl_null",
             ),
             # SELL: realized_pnl 必须非 NULL
-            _check_constraint(
+            check_constraint(
                 expr=Q(side="SELL", realized_pnl__isnull=False) | Q(side="BUY"),
                 name="invrec_sell_realized_pnl_not_null",
             ),
@@ -80,6 +82,12 @@ class InvestmentRecord(models.Model):
         if self.cash_account_id and self.user_id:
             if self.cash_account.user_id != self.user_id:
                 raise ValidationError({"cash_account": "cash_account 不属于该 user，禁止绑定。"})
+        if self.cash_transaction_id and self.user_id:
+            if self.cash_transaction.user_id != self.user_id:
+                raise ValidationError({"cash_transaction": "cash_transaction 不属于该 user，禁止绑定。"})
+        if self.cash_transaction_id and self.cash_account_id:
+            if self.cash_transaction.account_id != self.cash_account_id:
+                raise ValidationError({"cash_transaction": "cash_transaction 与 cash_account 不一致。"})
 
         if self.side == "BUY" and self.realized_pnl is not None:
             raise ValidationError({"realized_pnl": "BUY 记录不允许填写 realized_pnl（必须为 NULL）。"})
@@ -119,12 +127,12 @@ class Position(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["user", "instrument"], name="uniq_user_instrument_position"),
 
-            _check_constraint(expr=Q(quantity__gte=0), name="pos_quantity_gte_0"),
-            _check_constraint(expr=Q(avg_cost__gte=0), name="pos_avg_cost_gte_0"),
-            _check_constraint(expr=Q(cost_total__gte=0), name="pos_cost_total_gte_0"),
+            check_constraint(expr=Q(quantity__gte=0), name="pos_quantity_gte_0"),
+            check_constraint(expr=Q(avg_cost__gte=0), name="pos_avg_cost_gte_0"),
+            check_constraint(expr=Q(cost_total__gte=0), name="pos_cost_total_gte_0"),
 
             # quantity=0 => avg_cost=0 且 cost_total=0
-            _check_constraint(
+            check_constraint(
                 expr=Q(quantity=0, avg_cost=0, cost_total=0) | Q(quantity__gt=0),
                 name="pos_zero_qty_means_zero_cost",
             ),

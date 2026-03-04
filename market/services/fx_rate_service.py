@@ -2,28 +2,13 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from accounts.services import pull_usd_exchange_rates
+from shared.fx import normalize_usd_rates
 
 from .cache_keys import USD_EXCHANGE_RATES_KEY, UTC8, WATCHLIST_QUOTES_KEY
 
 
 def _normalize_rates(raw_rates: object) -> dict[str, float]:
-    if not isinstance(raw_rates, dict):
-        return {"USD": 1.0}
-
-    normalized: dict[str, float] = {}
-    for code, raw in raw_rates.items():
-        c = str(code or "").strip().upper()
-        if not c:
-            continue
-        try:
-            v = float(raw)
-        except (TypeError, ValueError):
-            continue
-        if v > 0:
-            normalized[c] = v
-
-    normalized["USD"] = 1.0
-    return normalized
+    return {code: float(value) for code, value in normalize_usd_rates(raw_rates).items()}
 
 
 def get_fx_rates(requested_base: str) -> dict:

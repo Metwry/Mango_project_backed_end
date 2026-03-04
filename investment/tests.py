@@ -59,6 +59,8 @@ class InvestmentBasicApiTests(APITestCase):
     buy_endpoint = "/api/investment/buy/"
     sell_endpoint = "/api/investment/sell/"
     positions_endpoint = "/api/investment/positions/"
+    history_endpoint = "/api/investment/history/"
+    tx_endpoint = "/api/user/transactions/"
 
     def setUp(self):
         cache.clear()
@@ -116,7 +118,7 @@ class InvestmentBasicApiTests(APITestCase):
             },
         )
 
-    def test_sell_all_deletes_position_and_investment_account(self):
+    def test_sell_all_deletes_position_and_archives_investment_account(self):
         self.client.post(
             self.buy_endpoint,
             {
@@ -140,13 +142,125 @@ class InvestmentBasicApiTests(APITestCase):
         self.assertEqual(sell_resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(sell_resp.data["position"]["quantity"], "0")
         self.assertFalse(Position.objects.filter(user=self.user, instrument=self.us_instrument).exists())
-        self.assertFalse(
-            Accounts.objects.filter(
-                user=self.user,
-                type=Accounts.AccountType.INVESTMENT,
-                name=INVESTMENT_ACCOUNT_NAME,
-            ).exists()
+        investment_account = Accounts.objects.get(
+            user=self.user,
+            type=Accounts.AccountType.INVESTMENT,
+            name=INVESTMENT_ACCOUNT_NAME,
         )
+        self.assertEqual(investment_account.status, Accounts.Status.ARCHIVED)
+
+    def test_buy_after_full_sell_reuses_archived_investment_account(self):
+        first_buy_resp = self.client.post(
+            self.buy_endpoint,
+            {
+                "instrument_id": self.us_instrument.id,
+                "quantity": "2.000000",
+                "price": "10.000000",
+                "cash_account_id": self.usd_account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(first_buy_resp.status_code, status.HTTP_201_CREATED)
+        archived_candidate = Accounts.objects.get(
+            user=self.user,
+            type=Accounts.AccountType.INVESTMENT,
+            name=INVESTMENT_ACCOUNT_NAME,
+        )
+        original_account_id = archived_candidate.id
+
+        sell_resp = self.client.post(
+            self.sell_endpoint,
+            {
+                "instrument_id": self.us_instrument.id,
+                "quantity": "2.000000",
+                "price": "11.000000",
+                "cash_account_id": self.usd_account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(sell_resp.status_code, status.HTTP_201_CREATED)
+        archived_candidate.refresh_from_db()
+        self.assertEqual(archived_candidate.status, Accounts.Status.ARCHIVED)
+
+        second_buy_resp = self.client.post(
+            self.buy_endpoint,
+            {
+                "instrument_id": self.us_instrument.id,
+                "quantity": "1.000000",
+                "price": "9.000000",
+                "cash_account_id": self.usd_account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(second_buy_resp.status_code, status.HTTP_201_CREATED)
+
+        reactivated = Accounts.objects.get(
+            user=self.user,
+            type=Accounts.AccountType.INVESTMENT,
+            name=INVESTMENT_ACCOUNT_NAME,
+        )
+        self.assertEqual(reactivated.id, original_account_id)
+        self.assertEqual(reactivated.status, Accounts.Status.ACTIVE)
+
+    def test_cannot_reverse_investment_generated_cash_transaction(self):
+        buy_resp = self.client.post(
+            self.buy_endpoint,
+            {
+                "instrument_id": self.us_instrument.id,
+                "quantity": "1.000000",
+                "price": "10.000000",
+                "cash_account_id": self.usd_account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(buy_resp.status_code, status.HTTP_201_CREATED)
+        tx_id = buy_resp.data["transaction_id"]
+
+        reverse_resp = self.client.post(f"{self.tx_endpoint}{tx_id}/reverse/", {}, format="json")
+        self.assertEqual(reverse_resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("不允许撤销", str(reverse_resp.data))
+
+        self.usd_account.refresh_from_db()
+        self.assertEqual(self.usd_account.balance, Decimal("9990.00"))
+        self.assertEqual(Transaction.objects.filter(account=self.usd_account).count(), 1)
+
+    def test_history_query_returns_read_only_investment_records(self):
+        buy_resp = self.client.post(
+            self.buy_endpoint,
+            {
+                "instrument_id": self.us_instrument.id,
+                "quantity": "2.000000",
+                "price": "10.000000",
+                "cash_account_id": self.usd_account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(buy_resp.status_code, status.HTTP_201_CREATED)
+        sell_resp = self.client.post(
+            self.sell_endpoint,
+            {
+                "instrument_id": self.us_instrument.id,
+                "quantity": "1.000000",
+                "price": "11.000000",
+                "cash_account_id": self.usd_account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(sell_resp.status_code, status.HTTP_201_CREATED)
+
+        history_resp = self.client.get(self.history_endpoint, {"limit": 20, "offset": 0})
+        self.assertEqual(history_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(history_resp.data["count"], 2)
+        self.assertEqual(len(history_resp.data["items"]), 2)
+
+        first = history_resp.data["items"][0]
+        self.assertIn("cash_transaction_id", first)
+        self.assertIn("cash_flow_amount", first)
+        self.assertIn("instrument_symbol", first)
+        self.assertIn("cash_account_name", first)
+
+        delete_resp = self.client.delete(self.history_endpoint)
+        self.assertEqual(delete_resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @override_settings(
@@ -377,13 +491,12 @@ class InvestmentConcurrencyApiTests(TransactionTestCase):
 
         self.assertEqual(statuses, [status.HTTP_201_CREATED, status.HTTP_409_CONFLICT])
         self.assertFalse(Position.objects.filter(user=self.user, instrument=self.instrument).exists())
-        self.assertFalse(
-            Accounts.objects.filter(
-                user=self.user,
-                type=Accounts.AccountType.INVESTMENT,
-                name=INVESTMENT_ACCOUNT_NAME,
-            ).exists()
+        investment_account = Accounts.objects.get(
+            user=self.user,
+            type=Accounts.AccountType.INVESTMENT,
+            name=INVESTMENT_ACCOUNT_NAME,
         )
+        self.assertEqual(investment_account.status, Accounts.Status.ARCHIVED)
         self.assertEqual(InvestmentRecord.objects.filter(side=InvestmentRecord.Side.SELL).count(), 1)
         self.assertEqual(Transaction.objects.count(), 2)
         self.assertFalse(UserInstrumentSubscription.objects.filter(user=self.user, instrument=self.instrument).exists())

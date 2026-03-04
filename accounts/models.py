@@ -62,6 +62,11 @@ class Accounts(models.Model):
 
 
 class Transaction(models.Model):
+    class Source(models.TextChoices):
+        MANUAL = "manual", "手工记账"
+        INVESTMENT = "investment", "投资交易"
+        REVERSAL = "reversal", "冲正流水"
+
     counterparty = models.CharField(max_length=32)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
@@ -83,6 +88,12 @@ class Transaction(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="transactions",
+        db_index=True,
+    )
+    source = models.CharField(
+        max_length=16,
+        choices=Source.choices,
+        default=Source.MANUAL,
         db_index=True,
     )
 
@@ -119,7 +130,7 @@ class Transaction(models.Model):
             # ===== 更新：禁止改 account/amount/add_date/reversal_of =====
             if self.pk:
                 old = Transaction.objects.only(
-                    "account_id", "amount", "add_date", "reversal_of_id"
+                    "account_id", "amount", "add_date", "reversal_of_id", "source"
                 ).get(pk=self.pk)
 
                 if old.account_id != self.account_id:
@@ -130,6 +141,8 @@ class Transaction(models.Model):
                     raise ValueError("交易创建后不能修改 add_date")
                 if old.reversal_of_id != self.reversal_of_id:
                     raise ValueError("交易创建后不能修改 reversal_of")
+                if old.source != self.source:
+                    raise ValueError("交易创建后不能修改 source")
 
                 # 注意：更新不改余额、不改 balance_after
                 return super().save(*args, **kwargs)

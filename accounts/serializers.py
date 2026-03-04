@@ -1,53 +1,7 @@
-from decimal import Decimal
-
-from django.core.cache import cache
-from django.db import transaction as db_transaction
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
-from investment.services import sync_investment_account_for_user
-from market.services.cache_keys import USD_EXCHANGE_RATES_KEY
-from shared.utils import normalize_code, quantize_decimal, to_decimal
-
 from .models import Accounts, Transaction
-
-ACCOUNT_PRECISION = Decimal("0.01")
-
-
-def _load_cached_usd_rates() -> dict[str, Decimal]:
-    payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}
-    raw_rates = payload.get("rates") if isinstance(payload, dict) else None
-    rates: dict[str, Decimal] = {"USD": Decimal("1")}
-    if not isinstance(raw_rates, dict):
-        return rates
-
-    for code, raw_value in raw_rates.items():
-        ccy = normalize_code(code)
-        value = to_decimal(raw_value)
-        if not ccy or value is None or value <= 0:
-            continue
-        rates[ccy] = value
-
-    rates["USD"] = Decimal("1")
-    return rates
-
-
-def _convert_balance_or_raise(*, amount: Decimal, from_currency: str, to_currency: str) -> Decimal:
-    source = normalize_code(from_currency)
-    target = normalize_code(to_currency)
-    if not source or not target or source == target:
-        return amount
-
-    rates = _load_cached_usd_rates()
-    source_rate = rates.get(source)
-    target_rate = rates.get(target)
-    if source_rate is None or target_rate is None or source_rate <= 0 or target_rate <= 0:
-        raise serializers.ValidationError(
-            {"currency": f"缺少汇率对数据：{source}/{target}，请先刷新汇率后重试。"}
-        )
-
-    converted = (amount / source_rate) * target_rate
-    return quantize_decimal(converted, ACCOUNT_PRECISION)
 
 
 class AccountSerializer(serializers.ModelSerializer):
@@ -91,32 +45,6 @@ class AccountSerializer(serializers.ModelSerializer):
 
         return attrs
 
-    def update(self, instance, validated_data):
-        previous_currency = instance.currency
-        next_currency = normalize_code(validated_data.get("currency", previous_currency)) or previous_currency
-
-        if next_currency != previous_currency:
-            converted_balance = _convert_balance_or_raise(
-                amount=instance.balance,
-                from_currency=previous_currency,
-                to_currency=next_currency,
-            )
-            validated_data["balance"] = converted_balance
-
-        with db_transaction.atomic():
-            updated = super().update(instance, validated_data)
-
-            if updated.type == Accounts.AccountType.INVESTMENT and updated.currency != previous_currency:
-                synced = sync_investment_account_for_user(
-                    user=updated.user,
-                    target_currency=updated.currency,
-                )
-                if synced is not None:
-                    updated = synced
-
-        return updated
-
-
 class TransactionSerializer(serializers.ModelSerializer):
     account_name = serializers.CharField(source="account.name", read_only=True)
 
@@ -127,6 +55,7 @@ class TransactionSerializer(serializers.ModelSerializer):
     # 新增：冲正信息只读展示
     reversal_of = serializers.PrimaryKeyRelatedField(read_only=True)
     reversed_at = serializers.DateTimeField(read_only=True)
+    source = serializers.CharField(read_only=True)
 
     class Meta:
         model = Transaction
@@ -144,6 +73,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "created_at",
             "reversal_of",
             "reversed_at",
+            "source",
         ]
         read_only_fields = [
             "id",
@@ -154,6 +84,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "user",
             "reversal_of",
             "reversed_at",
+            "source",
         ]
 
     def validate_account(self, value):
@@ -172,4 +103,23 @@ class TransactionSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"amount": "交易创建后不能修改 amount"})
             if "add_date" in attrs and attrs["add_date"] != self.instance.add_date:
                 raise serializers.ValidationError({"add_date": "交易创建后不能修改 add_date"})
+        return attrs
+
+
+class TransactionDeleteRequestSerializer(serializers.Serializer):
+    mode = serializers.ChoiceField(choices=["single", "activity"])
+    transaction_id = serializers.IntegerField(required=False, min_value=1)
+    activity_type = serializers.ChoiceField(
+        required=False,
+        choices=["manual", "investment", "reversed"],
+    )
+
+    def validate(self, attrs):
+        mode = attrs.get("mode")
+        if mode == "single":
+            if attrs.get("transaction_id") is None:
+                raise serializers.ValidationError({"transaction_id": "mode=single 时必填"})
+            return attrs
+        if attrs.get("activity_type") is None:
+            raise serializers.ValidationError({"activity_type": "mode=activity 时必填"})
         return attrs

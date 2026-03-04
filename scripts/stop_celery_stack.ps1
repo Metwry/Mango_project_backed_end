@@ -16,6 +16,25 @@ $pidFile = Join-Path $resolvedLogDir "stack_pids.csv"
 
 if (!(Test-Path $pidFile)) {
     Write-Host "PID file not found: $pidFile"
+    Write-Host "Fallback scan: try stopping celery processes for mango_project..."
+    $fallback = Get-CimInstance Win32_Process | Where-Object {
+        $_.CommandLine -and $_.CommandLine -match "celery" -and $_.CommandLine -match "mango_project"
+    }
+    if (!$fallback) {
+        Write-Host "No matching celery processes found."
+        exit 0
+    }
+    foreach ($p in $fallback) {
+        $targetPid = [int]$p.ProcessId
+        try {
+            Stop-Process -Id $targetPid -Force -ErrorAction Stop
+            Write-Host "Stopped PID $targetPid via fallback scan"
+        }
+        catch {
+            Write-Host "Already stopped PID $targetPid via fallback scan"
+        }
+    }
+    Write-Host "Done (fallback scan)."
     exit 0
 }
 
@@ -26,17 +45,16 @@ foreach ($line in $lines) {
     $name = $parts[0]
     $pidText = $parts[1]
     if ($pidText -notmatch "^\d+$") { continue }
-    $pid = [int]$pidText
+    $targetPid = [int]$pidText
     try {
-        $proc = Get-Process -Id $pid -ErrorAction Stop
+        $proc = Get-Process -Id $targetPid -ErrorAction Stop
         Stop-Process -Id $proc.Id -Force -ErrorAction Stop
-        Write-Host "Stopped $name (PID=$pid)"
+        Write-Host "Stopped $name (PID=$targetPid)"
     }
     catch {
-        Write-Host "Already stopped $name (PID=$pid)"
+        Write-Host "Already stopped $name (PID=$targetPid)"
     }
 }
 
 Remove-Item $pidFile -Force
 Write-Host "Done."
-

@@ -7,6 +7,7 @@ from .trade_service import (
     execute_sell,
     trim_decimal_str,
 )
+from .query_service import build_position_list_queryset, query_investment_history
 
 __all__ = [
     "INVESTMENT_ACCOUNT_NAME",
@@ -18,5 +19,7 @@ __all__ = [
     "execute_sell",
     "delete_zero_position",
     "trim_decimal_str",
+    "build_position_list_queryset",
+    "query_investment_history",
 ]
 

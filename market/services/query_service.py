@@ -3,29 +3,8 @@ from .quote_snapshot_service import (
     get_snapshot_payload,
     safe_price_str,
 )
-from ..models import UserInstrumentSubscription
-from shared.utils import normalize_code, strip_market_suffix
-
-
-def _watchlist_codes_by_market(user) -> dict[str, set[str]]:
-    if not user or not getattr(user, "is_authenticated", False):
-        return {}
-
-    grouped: dict[str, set[str]] = {}
-    rows = (
-        UserInstrumentSubscription.objects
-        .filter(user=user, from_watchlist=True)
-        .values_list("instrument__market", "instrument__short_code", "instrument__symbol")
-    )
-
-    for market, short_code, symbol in rows:
-        m = normalize_code(market)
-        code = normalize_code(short_code) or strip_market_suffix(symbol)
-        if not m or not code:
-            continue
-        grouped.setdefault(m, set()).add(code)
-
-    return grouped
+from .subscription_query_service import user_watchlist_codes_by_market
+from shared.utils import resolve_short_code
 
 
 def _filter_quotes(rows, allow_codes):
@@ -36,7 +15,7 @@ def _filter_quotes(rows, allow_codes):
     for row in rows:
         if not isinstance(row, dict):
             continue
-        code = normalize_code(row.get("short_code")) or strip_market_suffix(row.get("symbol"))
+        code = resolve_short_code(row.get("short_code"), row.get("symbol"))
         if code in allow_codes:
             normalized_row = dict(row)
             normalized_row["logo_url"] = normalized_row.get("logo_url") or None
@@ -54,7 +33,7 @@ def build_user_markets_snapshot(user) -> dict:
         for m in (payload.get("stale_markets") or [])
         if isinstance(m, str)
     }
-    watchlist_codes = _watchlist_codes_by_market(user)
+    watchlist_codes = user_watchlist_codes_by_market(user)
 
     markets = []
     for market in sorted(watchlist_codes.keys()):

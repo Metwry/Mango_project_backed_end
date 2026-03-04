@@ -9,6 +9,7 @@ from accounts.models import Accounts, Transaction
 from market.models import Instrument
 from market.services.quote_snapshot_service import ensure_instrument_quote
 from market.subscription_service import SOURCE_POSITION, set_user_instrument_source
+from shared.constants import market_currency
 from shared.exceptions import BusinessConflictError
 from shared.utils import quantize_decimal, trim_decimal, trim_decimal_str
 
@@ -18,13 +19,6 @@ from .account_service import sync_investment_account_for_user
 POSITION_PRECISION = Decimal("0.000001")
 ACCOUNT_PRECISION = Decimal("0.01")
 POSITION_ZERO = Decimal("0")
-MARKET_TO_CURRENCY = {
-    "US": "USD",
-    "CN": "CNY",
-    "HK": "HKD",
-}
-
-
 ConflictError = BusinessConflictError
 
 
@@ -40,7 +34,7 @@ def _expected_currency_for_instrument(instrument: Instrument) -> str:
     base_currency = str(getattr(instrument, "base_currency", "") or "").strip().upper()
     if base_currency:
         return base_currency
-    return MARKET_TO_CURRENCY.get(str(instrument.market or "").strip().upper(), "")
+    return market_currency(instrument.market, "")
 
 
 def _safe_category_name(*, side: str, price: Decimal, quantity: Decimal) -> str:
@@ -159,6 +153,7 @@ def execute_buy(*, user, instrument_id: int, quantity: Decimal, price: Decimal, 
             category_name=_safe_category_name(side=InvestmentRecord.Side.BUY, price=price, quantity=quantity),
             amount=POSITION_ZERO - account_cost,
             add_date=trade_at,
+            source=Transaction.Source.INVESTMENT,
         )
 
         old_qty = position.quantity or POSITION_ZERO
@@ -188,6 +183,7 @@ def execute_buy(*, user, instrument_id: int, quantity: Decimal, price: Decimal, 
             quantity=trim_decimal(quantity),
             price=trim_decimal(price),
             cash_account=account,
+            cash_transaction=tx,
             trade_at=trade_at,
             realized_pnl=None,
         )
@@ -240,6 +236,7 @@ def execute_sell(*, user, instrument_id: int, quantity: Decimal, price: Decimal,
             category_name=_safe_category_name(side=InvestmentRecord.Side.SELL, price=price, quantity=quantity),
             amount=account_proceeds,
             add_date=trade_at,
+            source=Transaction.Source.INVESTMENT,
         )
 
         if new_qty == POSITION_ZERO:
@@ -275,6 +272,7 @@ def execute_sell(*, user, instrument_id: int, quantity: Decimal, price: Decimal,
             quantity=trim_decimal(quantity),
             price=trim_decimal(price),
             cash_account=account,
+            cash_transaction=tx,
             trade_at=trade_at,
             realized_pnl=trim_decimal(realized_pnl),
         )

@@ -4,6 +4,8 @@ param(
     [switch]$WithBeat,
     [string]$Pool = "solo",
     [string]$LogDir = "tmp_celery_logs",
+    [switch]$FollowLogs,
+    [int]$TailLines = 50,
     [switch]$FakeProvider,
     [int]$MarketSyncEverySeconds = 0,
     [int]$SnapshotCaptureEverySeconds = 0,
@@ -139,3 +141,42 @@ Write-Host "PID file: $pidFile"
 Write-Host "Processes:"
 $records | Format-Table -AutoSize
 
+Start-Sleep -Milliseconds 800
+$exited = @()
+foreach ($r in $records) {
+    try {
+        Get-Process -Id $r.Pid -ErrorAction Stop | Out-Null
+    }
+    catch {
+        $exited += $r
+    }
+}
+
+if ($exited.Count -gt 0) {
+    Write-Warning "Some processes exited immediately. Showing last 40 log lines:"
+    foreach ($r in $exited) {
+        Write-Host ""
+        Write-Host ("--- " + $r.Name + " (" + $r.Log + ") ---")
+        if (Test-Path $r.Log) {
+            Get-Content $r.Log -Tail 40
+        } else {
+            Write-Host "log file not found"
+        }
+    }
+}
+
+Write-Host ""
+Write-Host "Log tail examples:"
+foreach ($r in $records) {
+    Write-Host ("  Get-Content '" + $r.Log + "' -Wait")
+}
+
+if ($FollowLogs) {
+    $paths = @($records | ForEach-Object { $_.Log })
+    if ($paths.Count -gt 0) {
+        $tail = [Math]::Max(1, $TailLines)
+        Write-Host ""
+        Write-Host "Following logs (Ctrl + C to stop):"
+        Get-Content -Path $paths -Tail $tail -Wait
+    }
+}

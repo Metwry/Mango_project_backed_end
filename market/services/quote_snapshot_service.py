@@ -3,7 +3,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from accounts.services import pull_single_instrument_quote
-from shared.utils import normalize_code, safe_payload_data, strip_market_suffix, to_decimal, trim_decimal_str
+from shared.utils import normalize_code, resolve_short_code, safe_payload_data, to_decimal, trim_decimal_str
 
 from .cache_keys import (
     DEFAULT_WATCHLIST_ORPHAN_TTL,
@@ -55,7 +55,7 @@ def build_quote_index(payload: object) -> dict[tuple[str, str], dict]:
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            short_code = normalize_code(row.get("short_code")) or strip_market_suffix(row.get("symbol"))
+            short_code = resolve_short_code(row.get("short_code"), row.get("symbol"))
             if short_code:
                 quote_index[(market_code, short_code)] = row
     return quote_index
@@ -147,7 +147,7 @@ def pop_quote_by_code(data: dict, market: str, short_code: str) -> dict | None:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        row_code = normalize_code(row.get("short_code")) or strip_market_suffix(row.get("symbol"))
+        row_code = resolve_short_code(row.get("short_code"), row.get("symbol"))
         if row_code == code:
             if removed_row is None:
                 removed_row = row
