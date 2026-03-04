@@ -22,6 +22,7 @@ from .cache_keys import (
     WATCHLIST_QUOTES_KEY,
     WATCHLIST_QUOTES_MARKET_KEY_PREFIX,
 )
+from .calendar_guard_service import resolve_due_markets
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +214,57 @@ def sync_watchlist_snapshot() -> dict:
     need_repair = bool(missing_before)
     force_fetch_all = need_bootstrap or need_repair
 
-    quotes = pull_watchlist_quotes(force_fetch_all_markets=force_fetch_all)
+    due_markets, guard_decisions = resolve_due_markets(subscription_codes.keys())
+    for market, decision in sorted(guard_decisions.items()):
+        if decision.should_pull:
+            log_info(
+                logger,
+                "calendar.guard.due",
+                market=market,
+                session=decision.session,
+                reason=decision.reason,
+            )
+        else:
+            log_info(
+                logger,
+                "calendar.guard.skip",
+                market=market,
+                session=decision.session,
+                reason=decision.reason,
+            )
+
+    if due_markets:
+        quotes = pull_watchlist_quotes(
+            force_fetch_all_markets=False,
+            allowed_markets=due_markets,
+        )
+    else:
+        if force_fetch_all:
+            # Cold start / repair path: initialize once immediately instead of waiting
+            # for the next due slot.
+            force_markets = set(subscription_codes.keys()) if need_bootstrap else set(missing_before.keys())
+            if force_markets:
+                log_info(
+                    logger,
+                    "calendar.guard.force_init_pull",
+                    need_bootstrap=need_bootstrap,
+                    need_repair=need_repair,
+                    force_markets=sorted(force_markets),
+                )
+                quotes = pull_watchlist_quotes(
+                    force_fetch_all_markets=True,
+                    allowed_markets=force_markets,
+                )
+            else:
+                quotes = {}
+                log_info(
+                    logger,
+                    "calendar.guard.block_bootstrap_or_repair",
+                    need_bootstrap=need_bootstrap,
+                    need_repair=need_repair,
+                )
+        else:
+            quotes = {}
     merged_data, reused_previous, filled_null = _merge_snapshot_with_fallback(previous_data, quotes, subscription_meta)
     merged_data = _filter_snapshot_by_subscription(merged_data, subscription_codes)
     if reused_previous or filled_null:
@@ -235,6 +286,7 @@ def sync_watchlist_snapshot() -> dict:
         "bootstrap_mode": need_bootstrap,
         "updated_markets": sorted(updated_markets),
         "stale_markets": stale_markets,
+        "guard_due_markets": sorted(due_markets),
         "data": merged_data,
     }
 
@@ -244,10 +296,19 @@ def sync_watchlist_snapshot() -> dict:
         for market in removed_markets:
             cache.delete(f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}{market}")
         for market, market_quotes in merged_data.items():
+            market_key = f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}{market}"
+            existing_market_payload = cache.get(market_key)
+            existing_pulled_at = (
+                existing_market_payload.get("pulled_at")
+                if isinstance(existing_market_payload, dict)
+                else None
+            )
+            pulled_at = updated_at if market in updated_markets else existing_pulled_at
             cache.set(
-                f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}{market}",
+                market_key,
                 {
                     "updated_at": payload["updated_at"],
+                    "pulled_at": pulled_at,
                     "market": market,
                     "stale": market in stale_markets,
                     "data": market_quotes,

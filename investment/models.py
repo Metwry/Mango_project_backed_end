@@ -7,8 +7,6 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
-from accounts.models import Currency
-
 
 def _check_constraint(*, expr: Q, name: str) -> models.CheckConstraint:
     if DJANGO_VERSION >= (5, 1):
@@ -133,87 +131,4 @@ class Position(models.Model):
         ]
         indexes = [
             models.Index(fields=["user", "updated_at"]),
-        ]
-
-
-class SnapshotDataStatus(models.TextChoices):
-    OK = "ok", "正常"
-    QUOTE_MISSING = "quote_missing", "缺少行情"
-
-
-class InvestmentAccountSnapshot(models.Model):
-    account = models.ForeignKey(
-        "accounts.Accounts",
-        on_delete=models.PROTECT,
-        db_index=True,
-        related_name="investment_account_snapshots",
-    )
-    snapshot_time = models.DateTimeField(db_index=True)
-    currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.USD)
-    total_asset = models.DecimalField(max_digits=20, decimal_places=6)
-    data_status = models.CharField(max_length=20, choices=SnapshotDataStatus.choices, default=SnapshotDataStatus.OK)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "investment_account_snapshot"
-        constraints = [
-            models.UniqueConstraint(fields=["account", "snapshot_time"], name="uniq_inv_acc_snapshot"),
-            _check_constraint(expr=Q(total_asset__gte=0), name="inv_acc_snapshot_total_asset_gte_0"),
-        ]
-        indexes = [
-            models.Index(fields=["account", "snapshot_time"], name="inv_acc_snap_acc_time_idx"),
-        ]
-
-
-class InvestmentPositionSnapshot(models.Model):
-    account = models.ForeignKey(
-        "accounts.Accounts",
-        on_delete=models.PROTECT,
-        db_index=True,
-        related_name="investment_position_snapshots",
-    )
-    instrument = models.ForeignKey(
-        "market.Instrument",
-        on_delete=models.PROTECT,
-        db_index=True,
-        related_name="investment_position_snapshots",
-    )
-    snapshot_time = models.DateTimeField(db_index=True)
-    quantity = models.DecimalField(max_digits=20, decimal_places=6, default=Decimal("0"))
-    avg_cost = models.DecimalField(max_digits=20, decimal_places=6, default=Decimal("0"))
-    market_price = models.DecimalField(max_digits=20, decimal_places=6, null=True, blank=True)
-    market_value = models.DecimalField(max_digits=20, decimal_places=6, null=True, blank=True)
-    realized_pnl = models.DecimalField(max_digits=20, decimal_places=6, default=Decimal("0"))
-    price_time = models.DateTimeField(null=True, blank=True)
-    currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.USD)
-    data_status = models.CharField(max_length=20, choices=SnapshotDataStatus.choices, default=SnapshotDataStatus.OK)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "investment_position_snapshot"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["account", "instrument", "snapshot_time"],
-                name="uniq_inv_pos_snapshot",
-            ),
-            _check_constraint(expr=Q(quantity__gte=0), name="inv_pos_snapshot_quantity_gte_0"),
-            _check_constraint(expr=Q(avg_cost__gte=0), name="inv_pos_snapshot_avg_cost_gte_0"),
-            _check_constraint(
-                expr=Q(market_price__isnull=True) | Q(market_price__gt=0),
-                name="inv_pos_snapshot_market_price_null_or_gt_0",
-            ),
-            _check_constraint(
-                expr=Q(market_value__isnull=True) | Q(market_value__gte=0),
-                name="inv_pos_snapshot_market_value_null_or_gte_0",
-            ),
-            _check_constraint(
-                expr=(
-                    Q(data_status=SnapshotDataStatus.OK, market_price__isnull=False, market_value__isnull=False)
-                    | Q(data_status=SnapshotDataStatus.QUOTE_MISSING)
-                ),
-                name="inv_pos_snapshot_status_price_consistent",
-            ),
-        ]
-        indexes = [
-            models.Index(fields=["account", "snapshot_time"], name="inv_pos_snap_acc_time_idx"),
         ]

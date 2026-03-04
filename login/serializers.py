@@ -21,7 +21,7 @@ class LoginSerializer(serializers.Serializer):
         email = (attrs.get("username") or "").strip().lower()
         password = attrs.get("password") or ""
         if not email or not password:
-            raise serializers.ValidationError({"detail": "邮箱和密码必填"})
+            raise serializers.ValidationError({"message": "邮箱和密码必填"})
 
         user = authenticate_email_password(self.context.get("request"), email=email, password=password)
         if not user:
@@ -47,7 +47,7 @@ class SendRegisterEmailCodeSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         send_register_email_code(validated_data["email"])
-        return {"detail": "验证码已发送"}
+        return {"message": "验证码已发送"}
 
 
 class EmailRegisterSerializer(serializers.Serializer):

@@ -40,7 +40,7 @@ class MarketFxRatesView(APIView):
             payload = get_fx_rates(request.query_params.get("base"))
         except ValueError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"message": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(payload, status=status.HTTP_200_OK)

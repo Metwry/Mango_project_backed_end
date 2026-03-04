@@ -4,12 +4,14 @@ import json
 import logging
 import re
 import urllib.parse
+import hashlib
 from dataclasses import asdict, dataclass
 from datetime import datetime, time, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import requests
+from django.conf import settings
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import pandas as pd
@@ -441,6 +443,133 @@ USD_MAINSTREAM_CURRENCIES = (
     "GBP",
     "HKD",
 )
+FAKE_USD_RATES = {
+    "USD": 1.0,
+    "CNY": 7.12,
+    "EUR": 0.92,
+    "JPY": 150.0,
+    "GBP": 0.79,
+    "HKD": 7.82,
+}
+
+
+def _quote_provider_mode() -> str:
+    return str(getattr(settings, "MARKET_QUOTE_PROVIDER", "real") or "real").strip().lower()
+
+
+def _use_fake_provider() -> bool:
+    return _quote_provider_mode() == "fake"
+
+
+def _stable_hash(text: str) -> int:
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return int(digest[:12], 16)
+
+
+def _fake_bucket(now_utc: datetime) -> int:
+    return int(now_utc.timestamp() // 60)
+
+
+def _fx_pair_from_code(raw: str) -> tuple[str, str] | None:
+    s = str(raw or "").strip().upper()
+    if s.endswith(".FX"):
+        s = s[:-3]
+    m = re.fullmatch(r"([A-Z]{3})[/_-]?([A-Z]{3})", s)
+    if not m:
+        return None
+    return m.group(1), m.group(2)
+
+
+def _fake_fx_price(short_code: str) -> float:
+    pair = _fx_pair_from_code(short_code)
+    if not pair:
+        return 1.0
+    base, quote = pair
+    if base == quote:
+        return 1.0
+    base_rate = FAKE_USD_RATES.get(base)
+    quote_rate = FAKE_USD_RATES.get(quote)
+    if base_rate is None or quote_rate is None or base_rate <= 0 or quote_rate <= 0:
+        return 1.0
+    if base == "USD":
+        return float(quote_rate)
+    if quote == "USD":
+        return float(1.0 / base_rate)
+    # cross via USD
+    return float(quote_rate / base_rate)
+
+
+def _fake_market_price(market: str, short_code: str, bucket: int) -> float:
+    market_code = str(market or "").upper()
+    code = str(short_code or "").upper()
+    if market_code == MARKET_FX:
+        base = _fake_fx_price(code)
+    elif market_code == MARKET_CRYPTO:
+        baseline = 500 + (_stable_hash(code) % 50000)
+        base = float(baseline)
+    else:
+        baseline = 20 + (_stable_hash(code) % 400)
+        base = float(baseline)
+
+    oscillation = ((bucket + (_stable_hash(code + market_code) % 37)) % 21 - 10) / 1000.0
+    price = base * (1.0 + oscillation)
+    return round(max(price, 0.0001), 6)
+
+
+def _build_fake_quote_row(*, market: str, symbol: str, short_code: str, name: str, now_utc: datetime) -> dict:
+    code = short_code or _strip_symbol_suffix(symbol)
+    bucket = _fake_bucket(now_utc)
+    price = _fake_market_price(market, code, bucket)
+    prev_close = round(price * 0.9975, 6)
+    day_high = round(max(price, prev_close) * 1.003, 6)
+    day_low = round(min(price, prev_close) * 0.997, 6)
+    pct = round(((price - prev_close) / prev_close) * 100.0, 4) if prev_close else None
+    vol_seed = (_stable_hash(f"{market}:{code}:{bucket}") % 5000) + 100
+    volume = round(vol_seed / 100.0, 2)
+    return {
+        "short_code": code,
+        "name": name or code,
+        "prev_close": prev_close,
+        "day_high": day_high,
+        "day_low": day_low,
+        "price": price,
+        "pct": pct,
+        "volume": volume,
+    }
+
+
+def _pull_watchlist_quotes_fake(
+    *,
+    now_utc: datetime,
+    rows: List[Tuple[str, str, str, str, Optional[str], Optional[str]]],
+    force_fetch_all_markets: bool,
+    allowed_markets: Optional[set[str] | list[str] | tuple[str, ...]],
+) -> Dict[str, List[dict]]:
+    by_market: Dict[str, List[Tuple[str, str, str]]] = {}
+    for symbol, short_code, name, market, _, _ in rows:
+        by_market.setdefault(market, []).append((symbol, short_code, name))
+
+    allowed = None
+    if allowed_markets is not None:
+        allowed = {str(m).strip().upper() for m in allowed_markets if str(m).strip()}
+
+    out: Dict[str, List[dict]] = {}
+    for market, items in by_market.items():
+        if allowed is not None and market not in allowed:
+            continue
+        if allowed is None and not force_fetch_all_markets and not should_fetch_market(market, now_utc):
+            continue
+        out[market] = [
+            _build_fake_quote_row(
+                market=market,
+                symbol=symbol,
+                short_code=short_code,
+                name=name,
+                now_utc=now_utc,
+            )
+            for symbol, short_code, name in items
+        ]
+    return out
 
 
 def _parse_fx_pair(raw: object) -> Optional[Tuple[str, str]]:
@@ -520,6 +649,9 @@ def get_unique_instruments_from_watchlist() -> List[Tuple[str, str, str, str, Op
 
 
 def pull_usd_exchange_rates(seed_rows: Optional[List[dict]] = None) -> Dict[str, float]:
+    if _use_fake_provider():
+        return dict(FAKE_USD_RATES)
+
     rates: Dict[str, float] = {"USD": 1.0}
 
     if isinstance(seed_rows, list):
@@ -543,6 +675,16 @@ def pull_usd_exchange_rates(seed_rows: Optional[List[dict]] = None) -> Dict[str,
 
 def pull_single_instrument_quote(symbol: str, short_code: str, name: str, market: str) -> Optional[dict]:
     """处理用户手动添加新代码时的突发查询"""
+    if _use_fake_provider():
+        now_utc = datetime.now(timezone.utc)
+        return _build_fake_quote_row(
+            market=market,
+            symbol=symbol,
+            short_code=short_code,
+            name=name,
+            now_utc=now_utc,
+        )
+
     item = [(symbol, short_code, name)]
     if market in (MARKET_CN, MARKET_HK, MARKET_US):
         quotes = fetch_stocks_sina(market, item)
@@ -557,13 +699,25 @@ def pull_single_instrument_quote(symbol: str, short_code: str, name: str, market
 
 
 # 配合你现有的数据库，保留批量入口
-def pull_watchlist_quotes(now_utc: Optional[datetime] = None, force_fetch_all_markets: bool = False) -> Dict[
-    str, List[dict]]:
+def pull_watchlist_quotes(
+    now_utc: Optional[datetime] = None,
+    force_fetch_all_markets: bool = False,
+    allowed_markets: Optional[set[str] | list[str] | tuple[str, ...]] = None,
+) -> Dict[str, List[dict]]:
     """定时任务批量拉取入口"""
     now_utc = now_utc or datetime.now(timezone.utc)
     rows = get_unique_instruments_from_subscriptions()
 
-    if not rows: return {}
+    if not rows:
+        return {}
+
+    if _use_fake_provider():
+        return _pull_watchlist_quotes_fake(
+            now_utc=now_utc,
+            rows=rows,
+            force_fetch_all_markets=force_fetch_all_markets,
+            allowed_markets=allowed_markets,
+        )
 
     by_market: Dict[str, List[Tuple[str, str, str]]] = {}
     for symbol, short_code, name, market, _, _ in rows:
@@ -571,8 +725,16 @@ def pull_watchlist_quotes(now_utc: Optional[datetime] = None, force_fetch_all_ma
 
     out: Dict[str, List[dict]] = {}
 
+    allowed = None
+    if allowed_markets is not None:
+        allowed = {str(m).strip().upper() for m in allowed_markets if str(m).strip()}
+
     for market, items in by_market.items():
-        if not force_fetch_all_markets and not should_fetch_market(market, now_utc):
+        if allowed is not None and market not in allowed:
+            logger.info("calendar guard skip market=%s reason=not_in_due_markets", market)
+            continue
+
+        if allowed is None and not force_fetch_all_markets and not should_fetch_market(market, now_utc):
             logger.warning("休市跳过行情拉取 market=%s 当前UTC时间=%s", market, now_utc.isoformat())
             continue
 

@@ -1,4 +1,5 @@
 from django_filters import rest_framework as filters
+from django.db.models.deletion import ProtectedError
 from rest_framework import filters as drf_filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -20,6 +21,30 @@ class AccountViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        try:
+            self.perform_destroy(instance)
+        except ProtectedError as exc:
+            model_counts = {}
+            for obj in exc.protected_objects:
+                model_label = obj._meta.label
+                model_counts[model_label] = model_counts.get(model_label, 0) + 1
+
+            details = [
+                {"model": model, "count": count}
+                for model, count in sorted(model_counts.items())
+            ]
+            return Response(
+                {
+                    "code": "account_delete_blocked",
+                    "message": "账户存在关联数据，无法删除，请先处理关联记录后再重试。",
+                    "details": details,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class TransactionFilter(filters.FilterSet):
