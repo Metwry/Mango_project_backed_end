@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+.env
+docs/
+
+.idea/
+.vscode/
+
+tmp_stress_logs/
+celerybeat-schedule*
+logo_downloads/
+
+*.log
+*.sqlite3
