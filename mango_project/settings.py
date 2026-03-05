@@ -172,6 +172,16 @@ SNAPSHOT_AGG_D1_TEST_EVERY_SECONDS = int(os.getenv("SNAPSHOT_AGG_D1_TEST_EVERY_S
 SNAPSHOT_AGG_MON1_TEST_EVERY_SECONDS = int(os.getenv("SNAPSHOT_AGG_MON1_TEST_EVERY_SECONDS", "0"))
 SNAPSHOT_CLEANUP_TEST_EVERY_SECONDS = int(os.getenv("SNAPSHOT_CLEANUP_TEST_EVERY_SECONDS", "0"))
 
+SNAPSHOT_AGG_H4_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_H4_CRON_MINUTE", "0"))
+SNAPSHOT_AGG_D1_CRON_HOUR = int(os.getenv("SNAPSHOT_AGG_D1_CRON_HOUR", "0"))
+SNAPSHOT_AGG_D1_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_D1_CRON_MINUTE", "0"))
+SNAPSHOT_AGG_MON1_CRON_DAY = int(os.getenv("SNAPSHOT_AGG_MON1_CRON_DAY", "1"))
+SNAPSHOT_AGG_MON1_CRON_HOUR = int(os.getenv("SNAPSHOT_AGG_MON1_CRON_HOUR", "0"))
+SNAPSHOT_AGG_MON1_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_MON1_CRON_MINUTE", "0"))
+SNAPSHOT_CLEANUP_CRON_HOUR = int(os.getenv("SNAPSHOT_CLEANUP_CRON_HOUR", "1"))
+SNAPSHOT_CLEANUP_CRON_MINUTE = int(os.getenv("SNAPSHOT_CLEANUP_CRON_MINUTE", "45"))
+CELERY_BEAT_MAX_LOOP_INTERVAL = int(os.getenv("CELERY_BEAT_MAX_LOOP_INTERVAL", "5"))
+
 
 def _schedule_with_test_seconds(default_cron, every_seconds: int):
     if every_seconds and every_seconds > 0:
@@ -206,7 +216,7 @@ CELERY_BEAT_SCHEDULE = {
     "aggregate-snapshot-h4": {
         "task": "snapshot.tasks.task_aggregate_h4_snapshots",
         "schedule": _schedule_with_test_seconds(
-            crontab(minute=10, hour="*/4"),
+            crontab(minute=SNAPSHOT_AGG_H4_CRON_MINUTE, hour="*/4"),
             SNAPSHOT_AGG_H4_TEST_EVERY_SECONDS,
         ),
         "options": {"queue": "snapshot_aggregate"},
@@ -214,7 +224,7 @@ CELERY_BEAT_SCHEDULE = {
     "aggregate-snapshot-d1": {
         "task": "snapshot.tasks.task_aggregate_d1_snapshots",
         "schedule": _schedule_with_test_seconds(
-            crontab(minute=20, hour=0),
+            crontab(minute=SNAPSHOT_AGG_D1_CRON_MINUTE, hour=SNAPSHOT_AGG_D1_CRON_HOUR),
             SNAPSHOT_AGG_D1_TEST_EVERY_SECONDS,
         ),
         "options": {"queue": "snapshot_aggregate"},
@@ -222,7 +232,11 @@ CELERY_BEAT_SCHEDULE = {
     "aggregate-snapshot-mon1": {
         "task": "snapshot.tasks.task_aggregate_mon1_snapshots",
         "schedule": _schedule_with_test_seconds(
-            crontab(minute=30, hour=0, day_of_month=1),
+            crontab(
+                minute=SNAPSHOT_AGG_MON1_CRON_MINUTE,
+                hour=SNAPSHOT_AGG_MON1_CRON_HOUR,
+                day_of_month=SNAPSHOT_AGG_MON1_CRON_DAY,
+            ),
             SNAPSHOT_AGG_MON1_TEST_EVERY_SECONDS,
         ),
         "options": {"queue": "snapshot_aggregate"},
@@ -230,7 +244,7 @@ CELERY_BEAT_SCHEDULE = {
     "cleanup-snapshot-history-daily": {
         "task": "snapshot.tasks.task_cleanup_snapshot_history",
         "schedule": _schedule_with_test_seconds(
-            crontab(hour=1, minute=45),
+            crontab(hour=SNAPSHOT_CLEANUP_CRON_HOUR, minute=SNAPSHOT_CLEANUP_CRON_MINUTE),
             SNAPSHOT_CLEANUP_TEST_EVERY_SECONDS,
         ),
         "options": {"queue": "snapshot_cleanup"},

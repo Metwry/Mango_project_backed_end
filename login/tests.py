@@ -21,6 +21,8 @@ class LoginBasicApiTests(APITestCase):
     login_endpoint = "/api/login/"
     send_code_endpoint = "/api/register/email/code/"
     register_endpoint = "/api/register/email/"
+    send_password_reset_code_endpoint = "/api/password/reset/code/"
+    password_reset_endpoint = "/api/password/reset/"
 
     def setUp(self):
         cache.clear()
@@ -77,6 +79,9 @@ class LoginComplexApiTests(APITestCase):
     login_endpoint = "/api/login/"
     send_code_endpoint = "/api/register/email/code/"
     register_endpoint = "/api/register/email/"
+    send_password_reset_code_endpoint = "/api/password/reset/code/"
+    password_reset_endpoint = "/api/password/reset/"
+    update_username_endpoint = "/api/user/profile/username/"
 
     def setUp(self):
         cache.clear()
@@ -137,6 +142,131 @@ class LoginComplexApiTests(APITestCase):
         resp = self.client.post(
             self.login_endpoint,
             {"username": "login_fail@example.com", "password": "bad"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_login_supports_legacy_username_and_email(self):
+        user = get_user_model().objects.create_user(
+            username="legacy_name",
+            email="legacy_user@example.com",
+            password="test123456",
+        )
+
+        by_username = self.client.post(
+            self.login_endpoint,
+            {"username": "legacy_name", "password": "test123456"},
+            format="json",
+        )
+        self.assertEqual(by_username.status_code, status.HTTP_200_OK)
+        self.assertEqual(by_username.data["user"]["id"], user.id)
+
+        by_email = self.client.post(
+            self.login_endpoint,
+            {"username": "legacy_user@example.com", "password": "test123456"},
+            format="json",
+        )
+        self.assertEqual(by_email.status_code, status.HTTP_200_OK)
+        self.assertEqual(by_email.data["user"]["id"], user.id)
+
+    def test_password_reset_success(self):
+        email = "reset_ok@example.com"
+        old_password = "old123456"
+        new_password = "new123456"
+        get_user_model().objects.create_user(
+            username=email,
+            email=email,
+            password=old_password,
+        )
+
+        send_resp = self.client.post(self.send_password_reset_code_endpoint, {"email": email}, format="json")
+        self.assertEqual(send_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 1)
+        code = "".join(ch for ch in mail.outbox[-1].body if ch.isdigit())[:6]
+
+        reset_resp = self.client.post(
+            self.password_reset_endpoint,
+            {"email": email, "password": new_password, "code": code},
+            format="json",
+        )
+        self.assertEqual(reset_resp.status_code, status.HTTP_200_OK)
+
+        login_old = self.client.post(
+            self.login_endpoint,
+            {"username": email, "password": old_password},
+            format="json",
+        )
+        login_new = self.client.post(
+            self.login_endpoint,
+            {"username": email, "password": new_password},
+            format="json",
+        )
+        self.assertEqual(login_old.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(login_new.status_code, status.HTTP_200_OK)
+
+    def test_password_reset_requires_existing_email_and_valid_code(self):
+        email = "reset_missing@example.com"
+        send_missing = self.client.post(self.send_password_reset_code_endpoint, {"email": email}, format="json")
+        self.assertEqual(send_missing.status_code, status.HTTP_400_BAD_REQUEST)
+
+        get_user_model().objects.create_user(
+            username=email,
+            email=email,
+            password="old123456",
+        )
+        send_ok = self.client.post(self.send_password_reset_code_endpoint, {"email": email}, format="json")
+        self.assertEqual(send_ok.status_code, status.HTTP_200_OK)
+
+        wrong_code = self.client.post(
+            self.password_reset_endpoint,
+            {"email": email, "password": "new123456", "code": "000000"},
+            format="json",
+        )
+        self.assertEqual(wrong_code.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_username_success(self):
+        user = get_user_model().objects.create_user(
+            username="old_name",
+            email="rename_ok@example.com",
+            password="test123456",
+        )
+        self.client.force_authenticate(user=user)
+
+        resp = self.client.patch(
+            self.update_username_endpoint,
+            {"username": "new_name"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["user"]["username"], "new_name")
+        user.refresh_from_db()
+        self.assertEqual(user.username, "new_name")
+
+    def test_update_username_rejects_duplicate(self):
+        user = get_user_model().objects.create_user(
+            username="owner_name",
+            email="rename_dup_owner@example.com",
+            password="test123456",
+        )
+        get_user_model().objects.create_user(
+            username="taken_name",
+            email="rename_dup_taken@example.com",
+            password="test123456",
+        )
+        self.client.force_authenticate(user=user)
+
+        resp = self.client.patch(
+            self.update_username_endpoint,
+            {"username": "taken_name"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.data["message"], "用户名已存在")
+
+    def test_update_username_requires_auth(self):
+        resp = self.client.patch(
+            self.update_username_endpoint,
+            {"username": "new_name"},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
