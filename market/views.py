@@ -17,6 +17,7 @@ from .serializers import (
 from .services import (
     add_watchlist_symbol,
     build_latest_quotes,
+    build_market_indices_snapshot,
     build_user_markets_snapshot,
     delete_watchlist_symbol,
     get_fx_rates,
@@ -74,6 +75,13 @@ class MarketLatestQuoteBatchView(APIView):
         serializer.is_valid(raise_exception=True)
         quotes = build_latest_quotes(serializer.validated_data["items"])
         return Response({"quotes": quotes}, status=status.HTTP_200_OK)
+
+
+class MarketIndexSnapshotView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        return Response(build_market_indices_snapshot(), status=status.HTTP_200_OK)
 
 
 class MarketWatchlistAddView(APIView):

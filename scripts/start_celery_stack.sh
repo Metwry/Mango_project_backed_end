@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ENV_NAME="Back_end_project"
 TARGETS="all"
 WITH_BEAT="0"
 POOL="solo"
@@ -19,6 +20,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --project-root)
       PROJECT_ROOT="$2"
+      shift 2
+      ;;
+    --env-name)
+      ENV_NAME="$2"
       shift 2
       ;;
     --targets)
@@ -71,6 +76,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if ! command -v conda >/dev/null 2>&1; then
+  echo "conda command not found in PATH" >&2
+  exit 1
+fi
 
 PROJECT_ROOT="$(cd "$PROJECT_ROOT" && pwd)"
 RESOLVED_LOG_DIR="${PROJECT_ROOT}/${LOG_DIR}"
@@ -128,7 +138,7 @@ start_proc() {
     [[ "$SNAPSHOT_AGG_D1_EVERY_SECONDS" != "0" ]] && export SNAPSHOT_AGG_D1_TEST_EVERY_SECONDS="$SNAPSHOT_AGG_D1_EVERY_SECONDS"
     [[ "$SNAPSHOT_AGG_MON1_EVERY_SECONDS" != "0" ]] && export SNAPSHOT_AGG_MON1_TEST_EVERY_SECONDS="$SNAPSHOT_AGG_MON1_EVERY_SECONDS"
     [[ "$SNAPSHOT_CLEANUP_EVERY_SECONDS" != "0" ]] && export SNAPSHOT_CLEANUP_TEST_EVERY_SECONDS="$SNAPSHOT_CLEANUP_EVERY_SECONDS"
-    eval "$command" >"$logfile" 2>&1
+    conda run --no-capture-output -n "$ENV_NAME" bash -lc "$command" >"$logfile" 2>&1
   ) &
   echo "$!"
 }
@@ -150,8 +160,8 @@ done
 
 echo "Started celery stack."
 echo "ProjectRoot: ${PROJECT_ROOT}"
+echo "Conda Env: ${ENV_NAME}"
 echo "LogDir: ${RESOLVED_LOG_DIR}"
 echo "PID file: ${PID_FILE}"
 echo "Tail logs:"
 echo "  tail -f ${RESOLVED_LOG_DIR}/market_sync.log"
-

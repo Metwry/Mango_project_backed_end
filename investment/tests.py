@@ -118,6 +118,31 @@ class InvestmentBasicApiTests(APITestCase):
             },
         )
 
+    def test_buy_rejects_index_instrument(self):
+        index_instrument = Instrument.objects.create(
+            symbol="SPX.US",
+            short_code="SPX",
+            name="S&P500",
+            market=Instrument.Market.US,
+            asset_class=Instrument.AssetClass.INDEX,
+            base_currency="USD",
+            is_active=True,
+        )
+
+        resp = self.client.post(
+            self.buy_endpoint,
+            {
+                "instrument_id": index_instrument.id,
+                "quantity": "1.000000",
+                "price": "5000.000000",
+                "cash_account_id": self.usd_account.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("指数暂不支持交易", str(resp.data))
+
     def test_sell_all_deletes_position_and_archives_investment_account(self):
         self.client.post(
             self.buy_endpoint,

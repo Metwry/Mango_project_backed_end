@@ -29,6 +29,8 @@ def custom_exception_handler(exc, context):
             data["message"] = _first_error_message(data["message"])
         else:
             data["message"] = _first_error_message(data)
+        # Frontend only consumes `message`; remove duplicate DRF `detail`.
+        data.pop("detail", None)
     elif isinstance(data, list):
         response.data = {
             "errors": data,

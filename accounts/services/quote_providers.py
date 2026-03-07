@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time as time_mod
 import urllib.parse
 import hashlib
 from dataclasses import asdict, dataclass
@@ -35,6 +36,9 @@ PROXIES = {
     "http": f"http://127.0.0.1:{PROXY_PORT}",
     "https": f"http://127.0.0.1:{PROXY_PORT}",
 }
+BINANCE_EXCHANGE_INFO_URL = "https://api4.binance.com/api/v3/exchangeInfo"
+BINANCE_SYMBOLS_CACHE_TTL_SECONDS = 900
+_BINANCE_SUPPORTED_SYMBOLS_CACHE: tuple[float, set[str]] | None = None
 
 
 @dataclass
@@ -67,6 +71,38 @@ def _to_billion_amount(amount: Optional[float]) -> Optional[float]:
     if amount is None or amount <= 0:
         return None
     return round(amount / 100000000.0, 2)
+
+
+def _get_binance_supported_symbols(*, timeout: float = 10.0) -> set[str] | None:
+    global _BINANCE_SUPPORTED_SYMBOLS_CACHE
+
+    now_monotonic = time_mod.monotonic()
+    cached = _BINANCE_SUPPORTED_SYMBOLS_CACHE
+    if cached and now_monotonic - cached[0] < BINANCE_SYMBOLS_CACHE_TTL_SECONDS:
+        return cached[1]
+
+    try:
+        resp = requests.get(BINANCE_EXCHANGE_INFO_URL, timeout=timeout, proxies=PROXIES)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as exc:
+        logger.warning("币安交易对清单获取失败，跳过预校验 err=%s", exc)
+        return None
+
+    rows = payload.get("symbols") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        logger.warning("币安交易对清单格式异常，跳过预校验")
+        return None
+
+    supported = {
+        str(row.get("symbol") or "").upper().strip()
+        for row in rows
+        if isinstance(row, dict)
+        and str(row.get("status") or "").upper() == "TRADING"
+        and str(row.get("symbol") or "").strip()
+    }
+    _BINANCE_SUPPORTED_SYMBOLS_CACHE = (now_monotonic, supported)
+    return supported
 
 
 def _is_weekday(dt_local: datetime) -> bool:
@@ -216,35 +252,48 @@ def fetch_crypto_quotes_binance(items: List[Tuple[str, str, str]]) -> List[Quote
         symbol_map[b_symbol] = (short_code, name)
 
     if binance_symbols:
-        encoded_symbols = urllib.parse.quote(json.dumps(binance_symbols).replace(" ", ""))
-        url = f"https://api4.binance.com/api/v3/ticker/24hr?symbols={encoded_symbols}"
+        supported_symbols = _get_binance_supported_symbols()
+        request_symbols = binance_symbols
+        if supported_symbols is not None:
+            unsupported_symbols = [symbol for symbol in binance_symbols if symbol not in supported_symbols]
+            if unsupported_symbols:
+                logger.warning(
+                    "币安不支持的交易对已跳过 count=%s symbols=%s",
+                    len(unsupported_symbols),
+                    ",".join(unsupported_symbols[:20]),
+                )
+            request_symbols = [symbol for symbol in binance_symbols if symbol in supported_symbols]
 
-        try:
-            resp = requests.get(url, timeout=10, proxies=PROXIES)
-            resp.raise_for_status()
-            payload = resp.json()
-            data = payload if isinstance(payload, list) else [payload]
-        except Exception as exc:
-            logger.error(f"币安 API 请求失败 err={exc}")
-            data = []
+        if request_symbols:
+            encoded_symbols = urllib.parse.quote(json.dumps(request_symbols).replace(" ", ""))
+            url = f"https://api4.binance.com/api/v3/ticker/24hr?symbols={encoded_symbols}"
 
-        for item in data:
-            b_symbol = item.get("symbol")
-            if b_symbol not in symbol_map: continue
-            short_code, name = symbol_map[b_symbol]
+            try:
+                resp = requests.get(url, timeout=10, proxies=PROXIES)
+                resp.raise_for_status()
+                payload = resp.json()
+                data = payload if isinstance(payload, list) else [payload]
+            except Exception as exc:
+                logger.error(f"币安 API 请求失败 err={exc}")
+                data = []
 
-            prev_close = _safe_float(item.get("prevClosePrice"))
-            price = _safe_float(item.get("lastPrice"))
-            day_high = _safe_float(item.get("highPrice"))
-            day_low = _safe_float(item.get("lowPrice"))
-            pct = _safe_float(item.get("priceChangePercent"))
-            quote_volume = _safe_float(item.get("quoteVolume"))
+            for item in data:
+                b_symbol = item.get("symbol")
+                if b_symbol not in symbol_map: continue
+                short_code, name = symbol_map[b_symbol]
 
-            results.append(QuoteOut(
-                short_code=short_code, name=name, prev_close=prev_close,
-                day_high=day_high, day_low=day_low, price=price, pct=pct,
-                volume=quote_volume / 1e8 if quote_volume else None
-            ))
+                prev_close = _safe_float(item.get("prevClosePrice"))
+                price = _safe_float(item.get("lastPrice"))
+                day_high = _safe_float(item.get("highPrice"))
+                day_low = _safe_float(item.get("lowPrice"))
+                pct = _safe_float(item.get("priceChangePercent"))
+                quote_volume = _safe_float(item.get("quoteVolume"))
+
+                results.append(QuoteOut(
+                    short_code=short_code, name=name, prev_close=prev_close,
+                    day_high=day_high, day_low=day_low, price=price, pct=pct,
+                    volume=quote_volume / 1e8 if quote_volume else None
+                ))
 
     if usdt_rows:
         usdt_price = usdt_prev_close = usdt_day_high = usdt_day_low = usdt_pct = None

@@ -6,10 +6,12 @@ param(
     [string[]]$SyncMarkets = @("cn", "hk", "us", "fx", "crypto"),
     [string[]]$CalendarMarkets = @("US", "CN", "HK"),
     [string]$CalendarOutDir = "",
+    [string[]]$LogoMarkets = @("us", "hk", "crypto"),
     [switch]$SkipMigrate,
     [switch]$SkipSymbols,
     [switch]$SkipCalendar,
-    [switch]$WithLogoSync
+    [switch]$WithLogoSync,
+    [switch]$SymbolsInsertOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -52,6 +54,9 @@ if (-not $SkipSymbols) {
     Write-Host "`n[2/4] Syncing symbols..."
     $args = @("manage.py", "sync_symbols", "--markets")
     $args += $SyncMarkets
+    if ($SymbolsInsertOnly) {
+        $args += "--insert-only"
+    }
     Invoke-CondaPython $args
 }
 
@@ -73,7 +78,9 @@ if (-not $SkipCalendar) {
 
 if ($WithLogoSync) {
     Write-Host "`n[4/4] Syncing logo metadata..."
-    Invoke-CondaPython @("manage.py", "sync_logo_data", "--markets", "us", "crypto")
+    $args = @("manage.py", "sync_logo_data", "--markets")
+    $args += $LogoMarkets
+    Invoke-CondaPython $args
 } else {
     Write-Host "`n[4/4] Skip logo sync (use -WithLogoSync to enable)"
 }

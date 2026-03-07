@@ -6,6 +6,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 from accounts.models import Accounts, Transaction
 from investment.models import InvestmentRecord
 
+from .currency_service import convert_amount_or_raise
 from .transaction_query_service import (
     ACTIVITY_INVESTMENT,
     ACTIVITY_MANUAL,
@@ -64,7 +65,15 @@ def _revert_account_balances(*, rows: list[Transaction]) -> None:
         if account is None:
             account = Accounts.objects.select_for_update().get(pk=row.account_id)
             account_map[row.account_id] = account
-        account.balance = (account.balance or Decimal("0")) - (row.amount or Decimal("0"))
+        try:
+            rollback_amount = convert_amount_or_raise(
+                amount=row.amount or Decimal("0"),
+                from_currency=row.currency,
+                to_currency=account.currency,
+            )
+        except ValueError as exc:
+            raise ValidationError({"message": str(exc)})
+        account.balance = (account.balance or Decimal("0")) - rollback_amount
 
     for account in account_map.values():
         account.save(update_fields=["balance", "updated_at"])

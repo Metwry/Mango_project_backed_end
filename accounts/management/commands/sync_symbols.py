@@ -17,6 +17,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from market.models import Instrument
+from market.services.index_catalog import index_definitions_for_markets
 from market.services.logo_service import build_logo_metadata
 
 
@@ -97,6 +98,17 @@ class InstrumentPayload:
         }
 
 
+@dataclass
+class MarketSyncProgress:
+    label: str
+    status: str = "pending"
+    fetched: int = 0
+    persisted: int = 0
+    created: int = 0
+    updated: int = 0
+    message: str = ""
+
+
 def build_session(proxy_url: str = "") -> requests.Session:
     session = requests.Session()
     session.trust_env = False
@@ -175,11 +187,17 @@ class Command(BaseCommand):
             default=DEFAULT_CRYPTO_PROXY,
             help="Optional proxy URL for CoinGecko, e.g. http://127.0.0.1:7897",
         )
+        parser.add_argument(
+            "--insert-only",
+            action="store_true",
+            help="Insert new symbols only; do not update existing instruments.",
+        )
 
     def handle(self, *args, **options):
         selected_markets = set(options.get("markets") or ["cn", "hk", "us", "fx", "crypto"])
         limit_per_market = max(0, int(options.get("limit_per_market") or 0))
         crypto_proxy = (options.get("crypto_proxy") or "").strip()
+        insert_only = bool(options.get("insert_only"))
         self.smoke_mode = limit_per_market > 0
 
         if limit_per_market:
@@ -191,6 +209,8 @@ class Command(BaseCommand):
             )
         if crypto_proxy:
             self.stdout.write(f"Crypto fetch will use proxy: {crypto_proxy}")
+        if insert_only:
+            self.stdout.write("Insert-only mode enabled: existing instruments will not be updated.")
 
         market_jobs = [
             ("cn", "A-shares", self.fetch_cn_stocks, 5),
@@ -200,12 +220,22 @@ class Command(BaseCommand):
             ("crypto", "Top 50 Crypto", lambda: self.fetch_top_crypto(proxy_url=crypto_proxy), 5),
         ]
 
+        progress_by_market: dict[str, MarketSyncProgress] = {
+            market_key: MarketSyncProgress(label=market_label)
+            for market_key, market_label, _, _ in market_jobs
+            if market_key in selected_markets
+        }
         results: list[tuple[str, bool, str]] = []
+        self._render_market_progress(progress_by_market)
 
         for market_key, market_label, fetcher, retries in market_jobs:
             if market_key not in selected_markets:
                 continue
 
+            progress = progress_by_market[market_key]
+            progress.status = "fetching"
+            progress.message = ""
+            self._render_market_progress(progress_by_market)
             self.stdout.write(f"[{market_label}] fetching...")
             try:
                 fetched = call_with_retry(
@@ -216,16 +246,30 @@ class Command(BaseCommand):
                     max_sleep=10.0,
                     logger=self._warn,
                 )
+                fetched = self.attach_index_metadata(fetched, market_key=market_key)
                 records = fetched[:limit_per_market] if limit_per_market else fetched
                 if not records:
                     raise ValueError(f"{market_label} returned empty records")
+                progress.status = "enriching"
+                progress.fetched = len(fetched)
+                progress.message = ""
+                self._render_market_progress(progress_by_market)
                 records = self.attach_logo_metadata(records)
 
-                created, updated, dedup_total = self.upsert_instruments(records)
+                progress.status = "upserting"
+                progress.persisted = len(records)
+                self._render_market_progress(progress_by_market)
+                created, updated, persisted_total = self.upsert_instruments(records, insert_only=insert_only)
+                progress.status = "done"
+                progress.persisted = persisted_total
+                progress.created = created
+                progress.updated = updated
+                self._render_market_progress(progress_by_market)
                 self.stdout.write(
                     self.style.SUCCESS(
                         f"[{market_label}] success: fetched={len(fetched)}, "
-                        f"upserted={dedup_total}, created={created}, updated={updated}"
+                        f"persisted={persisted_total}, created={created}, updated={updated}, "
+                        f"insert_only={insert_only}"
                     )
                 )
                 results.append((market_label, True, ""))
@@ -237,9 +281,15 @@ class Command(BaseCommand):
                 ValueError,
                 RuntimeError,
             ) as exc:
+                progress.status = "failed"
+                progress.message = str(exc)
+                self._render_market_progress(progress_by_market)
                 self.stdout.write(self.style.ERROR(f"[{market_label}] failed: {exc}"))
                 results.append((market_label, False, str(exc)))
             except Exception as exc:  # noqa: BLE001
+                progress.status = "failed"
+                progress.message = str(exc)
+                self._render_market_progress(progress_by_market)
                 self.stdout.write(self.style.ERROR(f"[{market_label}] failed with unexpected error: {exc}"))
                 results.append((market_label, False, str(exc)))
 
@@ -256,6 +306,39 @@ class Command(BaseCommand):
 
         if success_count == 0:
             raise CommandError("All market sync jobs failed.")
+
+    def _render_market_progress(self, progress_by_market: dict[str, MarketSyncProgress]) -> None:
+        if not progress_by_market:
+            return
+
+        rows = [
+            (
+                item.label,
+                item.status,
+                str(item.fetched),
+                str(item.persisted),
+                str(item.created),
+                str(item.updated),
+                item.message,
+            )
+            for item in progress_by_market.values()
+        ]
+        headers = ("Market", "Status", "Fetched", "Persisted", "Created", "Updated", "Message")
+        widths = [
+            max(len(header), *(len(row[idx]) for row in rows))
+            for idx, header in enumerate(headers)
+        ]
+
+        def _fmt(row: tuple[str, ...]) -> str:
+            return " | ".join(cell.ljust(widths[idx]) for idx, cell in enumerate(row))
+
+        divider = "-+-".join("-" * width for width in widths)
+        self.stdout.write("")
+        self.stdout.write("Market sync progress")
+        self.stdout.write(_fmt(headers))
+        self.stdout.write(divider)
+        for row in rows:
+            self.stdout.write(_fmt(row))
 
     def _warn(self, message: str) -> None:
         self.stdout.write(self.style.WARNING(message))
@@ -476,6 +559,16 @@ class Command(BaseCommand):
         now = timezone.now()
         enriched: list[InstrumentPayload] = []
         for item in records:
+            if item.asset_class == Instrument.AssetClass.INDEX:
+                enriched.append(
+                    replace(
+                        item,
+                        logo_url=None,
+                        logo_source=None,
+                        logo_updated_at=None,
+                    )
+                )
+                continue
             logo_url, logo_source = build_logo_metadata(short_code=item.short_code, market=item.market)
             enriched.append(
                 replace(
@@ -483,6 +576,35 @@ class Command(BaseCommand):
                     logo_url=logo_url,
                     logo_source=logo_source,
                     logo_updated_at=now if logo_url else None,
+                )
+            )
+        return enriched
+
+    def attach_index_metadata(self, records: list[InstrumentPayload], *, market_key: str) -> list[InstrumentPayload]:
+        market_code_map = {
+            "cn": Instrument.Market.CN,
+            "hk": Instrument.Market.HK,
+            "us": Instrument.Market.US,
+        }
+        market_code = market_code_map.get(str(market_key or "").strip().lower())
+        if not market_code:
+            return records
+
+        enriched = list(records)
+        existing_symbols = {item.symbol for item in enriched}
+        for item in index_definitions_for_markets({market_code}):
+            if item.symbol in existing_symbols:
+                continue
+            enriched.append(
+                InstrumentPayload(
+                    symbol=item.symbol,
+                    short_code=item.short_code,
+                    name=item.name,
+                    asset_class=Instrument.AssetClass.INDEX,
+                    market=item.market,
+                    exchange=item.exchange,
+                    base_currency=item.base_currency,
+                    is_active=True,
                 )
             )
         return enriched
@@ -519,7 +641,12 @@ class Command(BaseCommand):
             logger=self._warn,
         )
 
-    def upsert_instruments(self, records: Iterable[InstrumentPayload]) -> tuple[int, int, int]:
+    def upsert_instruments(
+        self,
+        records: Iterable[InstrumentPayload],
+        *,
+        insert_only: bool = False,
+    ) -> tuple[int, int, int]:
         dedup_by_symbol: dict[str, InstrumentPayload] = {}
         for raw in records:
             symbol = raw.symbol.strip()[:50]
@@ -535,6 +662,10 @@ class Command(BaseCommand):
                 market=raw.market,
                 exchange=raw.exchange,
                 base_currency=raw.base_currency,
+                logo_url=raw.logo_url,
+                logo_color=raw.logo_color,
+                logo_source=raw.logo_source,
+                logo_updated_at=raw.logo_updated_at,
                 is_active=raw.is_active,
             )
 
@@ -555,6 +686,8 @@ class Command(BaseCommand):
             existing = existing_map.get(symbol)
             if existing is None:
                 to_create.append(Instrument(**payload.as_model_kwargs()))
+                continue
+            if insert_only:
                 continue
 
             changed = False
@@ -580,7 +713,7 @@ class Command(BaseCommand):
                     batch_size=1000,
                 )
 
-        return len(to_create), len(to_update), len(dedup_by_symbol)
+        return len(to_create), len(to_update), len(to_create) + len(to_update)
 
     @staticmethod
     def run_quietly(fn: Callable[[], object]) -> object:

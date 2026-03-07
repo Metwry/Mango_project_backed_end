@@ -47,13 +47,15 @@ def _get_instrument(instrument_id: int) -> Instrument:
     instrument = (
         Instrument.objects
         .filter(id=instrument_id)
-        .only("id", "symbol", "short_code", "name", "is_active", "market", "base_currency")
+        .only("id", "symbol", "short_code", "name", "is_active", "market", "base_currency", "asset_class")
         .first()
     )
     if instrument is None:
         raise NotFound("标的不存在")
     if not instrument.is_active:
         raise ConflictError("标的不可交易")
+    if instrument.asset_class == Instrument.AssetClass.INDEX:
+        raise ConflictError("指数暂不支持交易")
     return instrument
 
 

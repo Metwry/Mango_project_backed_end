@@ -13,6 +13,8 @@ SKIP_MIGRATE="0"
 SKIP_SYMBOLS="0"
 SKIP_CALENDAR="0"
 WITH_LOGO_SYNC="0"
+SYMBOLS_INSERT_ONLY="0"
+LOGO_MARKETS="us hk crypto"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -60,6 +62,14 @@ while [[ $# -gt 0 ]]; do
       WITH_LOGO_SYNC="1"
       shift
       ;;
+    --symbols-insert-only)
+      SYMBOLS_INSERT_ONLY="1"
+      shift
+      ;;
+    --logo-markets)
+      LOGO_MARKETS="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown arg: $1" >&2
       exit 1
@@ -96,7 +106,14 @@ fi
 if [[ "$SKIP_SYMBOLS" == "0" ]]; then
   echo
   echo "[2/4] Syncing symbols..."
-  conda run -n "$ENV_NAME" python manage.py sync_symbols --markets $SYNC_MARKETS
+  sync_symbols_args=(manage.py sync_symbols --markets)
+  for market in $SYNC_MARKETS; do
+    sync_symbols_args+=("$market")
+  done
+  if [[ "$SYMBOLS_INSERT_ONLY" == "1" ]]; then
+    sync_symbols_args+=(--insert-only)
+  fi
+  conda run -n "$ENV_NAME" python "${sync_symbols_args[@]}"
 fi
 
 if [[ "$SKIP_CALENDAR" == "0" ]]; then
@@ -112,7 +129,11 @@ fi
 if [[ "$WITH_LOGO_SYNC" == "1" ]]; then
   echo
   echo "[4/4] Syncing logo metadata..."
-  conda run -n "$ENV_NAME" python manage.py sync_logo_data --markets us crypto
+  sync_logo_args=(manage.py sync_logo_data --markets)
+  for market in $LOGO_MARKETS; do
+    sync_logo_args+=("$market")
+  done
+  conda run -n "$ENV_NAME" python "${sync_logo_args[@]}"
 else
   echo
   echo "[4/4] Skip logo sync (use --with-logo-sync to enable)"

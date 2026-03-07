@@ -1,5 +1,6 @@
 param(
     [string]$ProjectRoot = "",
+    [string]$EnvName = "Back_end_project",
     [string[]]$Targets = @("all"),
     [switch]$WithBeat,
     [string]$Pool = "solo",
@@ -103,7 +104,7 @@ if ($SnapshotCleanupEverySeconds -gt 0) {
 }
 
 function Start-StackProcess([string]$name, [string]$command, [string]$logPath) {
-    $script = $commonEnv + "`n" + $command + " *> '$logPath'"
+    $script = $commonEnv + "`n" + "conda run --no-capture-output -n $EnvName $command *> '$logPath'"
     return Start-Process pwsh -ArgumentList @("-NoProfile", "-Command", $script) -PassThru
 }
 
@@ -136,6 +137,7 @@ foreach ($r in $records) {
 
 Write-Host "Started celery stack."
 Write-Host "ProjectRoot: $ProjectRoot"
+Write-Host "Conda Env: $EnvName"
 Write-Host "LogDir: $resolvedLogDir"
 Write-Host "PID file: $pidFile"
 Write-Host "Processes:"

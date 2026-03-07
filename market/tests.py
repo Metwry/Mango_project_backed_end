@@ -11,6 +11,7 @@ from rest_framework.test import APITestCase
 
 from market.models import Instrument, UserInstrumentSubscription
 from market.services.cache_keys import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.index_quote_service import build_market_indices_snapshot
 from market.services.quote_snapshot_service import orphan_quote_cache_key
 
 
@@ -66,6 +67,72 @@ class MarketBasicApiTests(APITestCase):
         self.assertEqual(snapshot_resp.data["markets"][0]["market"], "US")
         self.assertEqual(snapshot_resp.data["markets"][0]["quotes"][0]["logo_url"], None)
         self.assertEqual(snapshot_resp.data["markets"][0]["quotes"][0]["logo_color"], None)
+
+    def test_watchlist_add_rejects_index_instrument(self):
+        Instrument.objects.create(
+            symbol="SPX.US",
+            short_code="SPX",
+            name="S&P 500",
+            market=Instrument.Market.US,
+            asset_class=Instrument.AssetClass.INDEX,
+            is_active=True,
+        )
+
+        resp = self.client.post(self.watchlist_endpoint, {"symbol": "SPX.US"}, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("message", resp.data)
+        self.assertIn("指数暂不支持加入自选", resp.data["message"])
+
+    @patch(
+        "market.views.build_market_indices_snapshot",
+        return_value={
+            "updated_at": "2026-03-07T09:30:00+08:00",
+            "items": [
+                {
+                    "instrument_id": 101,
+                    "name": "S&P500",
+                    "prev_close": "5100",
+                    "day_high": "5150",
+                    "day_low": "5080",
+                    "pct": "0.8",
+                }
+            ],
+        },
+    )
+    def test_market_indices_endpoint_returns_payload(self, _mock_snapshot):
+        resp = self.client.get("/api/user/markets/indices/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["updated_at"], "2026-03-07T09:30:00+08:00")
+        self.assertEqual(resp.data["items"][0]["name"], "S&P500")
+        self.assertEqual(resp.data["items"][0]["pct"], "0.8")
+
+    @override_settings(MARKET_QUOTE_PROVIDER="fake", MARKET_INDEX_PROVIDER="fake")
+    def test_build_market_indices_snapshot_with_fake_provider(self):
+        Instrument.objects.create(
+            symbol="SPX.US",
+            short_code="SPX",
+            name="S&P500",
+            market=Instrument.Market.US,
+            asset_class=Instrument.AssetClass.INDEX,
+            is_active=True,
+        )
+        Instrument.objects.create(
+            symbol="HSI.HK",
+            short_code="HSI",
+            name="恒生指数",
+            market=Instrument.Market.HK,
+            asset_class=Instrument.AssetClass.INDEX,
+            is_active=True,
+        )
+
+        payload = build_market_indices_snapshot()
+
+        self.assertIn("updated_at", payload)
+        self.assertEqual(len(payload["items"]), 2)
+        self.assertEqual(payload["items"][0]["name"], "S&P500")
+        self.assertIsNotNone(payload["items"][0]["prev_close"])
 
     def test_latest_quotes_batch_reads_from_redis(self):
         cache.set(
@@ -191,12 +258,20 @@ class MarketComplexApiTests(APITestCase):
 )
 class MarketLogoSyncCommandTests(TestCase):
     @patch("market.management.commands.sync_logo_data.extract_logo_theme_color", return_value="#112233")
-    def test_sync_logo_data_updates_us_and_crypto(self, _mock_extract):
+    def test_sync_logo_data_updates_us_hk_and_crypto_by_default(self, _mock_extract):
         us = Instrument.objects.create(
             symbol="AAPL.US",
             short_code="AAPL",
             name="Apple Inc.",
             market=Instrument.Market.US,
+            asset_class=Instrument.AssetClass.STOCK,
+            is_active=True,
+        )
+        hk = Instrument.objects.create(
+            symbol="01810.HK",
+            short_code="01810",
+            name="Xiaomi",
+            market=Instrument.Market.HK,
             asset_class=Instrument.AssetClass.STOCK,
             is_active=True,
         )
@@ -220,6 +295,7 @@ class MarketLogoSyncCommandTests(TestCase):
         call_command("sync_logo_data", stdout=StringIO())
 
         us.refresh_from_db()
+        hk.refresh_from_db()
         crypto.refresh_from_db()
         cn.refresh_from_db()
 
@@ -234,6 +310,12 @@ class MarketLogoSyncCommandTests(TestCase):
         self.assertEqual(crypto.logo_color, "#112233")
         self.assertEqual(crypto.logo_source, "logo.dev:crypto")
         self.assertIsNotNone(crypto.logo_updated_at)
+
+        self.assertIn("/ticker/1810.HK", hk.logo_url)
+        self.assertIn("token=pk_test_logo_token", hk.logo_url)
+        self.assertEqual(hk.logo_color, "#112233")
+        self.assertEqual(hk.logo_source, "logo.dev:ticker")
+        self.assertIsNotNone(hk.logo_updated_at)
 
         self.assertIsNone(cn.logo_url)
         self.assertIsNone(cn.logo_color)
@@ -279,3 +361,50 @@ class MarketLogoSyncCommandTests(TestCase):
 
         self.assertIn("/ticker/SHOP", inst.logo_url)
         self.assertIsNone(inst.logo_color)
+
+    @patch("market.management.commands.sync_logo_data.extract_logo_theme_color", return_value="#112233")
+    def test_sync_logo_data_cn_uses_exchange_suffix(self, _mock_extract):
+        sh = Instrument.objects.create(
+            symbol="600519.CN",
+            short_code="600519",
+            name="Kweichow Moutai",
+            market=Instrument.Market.CN,
+            asset_class=Instrument.AssetClass.STOCK,
+            is_active=True,
+        )
+        sz = Instrument.objects.create(
+            symbol="000001.CN",
+            short_code="000001",
+            name="Ping An Bank",
+            market=Instrument.Market.CN,
+            asset_class=Instrument.AssetClass.STOCK,
+            is_active=True,
+        )
+
+        call_command("sync_logo_data", "--markets", "cn", stdout=StringIO())
+
+        sh.refresh_from_db()
+        sz.refresh_from_db()
+
+        self.assertIn("/ticker/600519.SS", sh.logo_url)
+        self.assertIn("/ticker/000001.SZ", sz.logo_url)
+        self.assertEqual(sh.logo_source, "logo.dev:ticker")
+        self.assertEqual(sz.logo_source, "logo.dev:ticker")
+
+
+class MarketCoreIndexSyncCommandTests(TestCase):
+    def test_sync_core_indices_creates_selected_market_indices(self):
+        call_command("sync_core_indices", "--markets", "us", "hk", stdout=StringIO())
+
+        symbols = set(
+            Instrument.objects
+            .filter(asset_class=Instrument.AssetClass.INDEX)
+            .values_list("symbol", flat=True)
+        )
+
+        self.assertIn("SPX.US", symbols)
+        self.assertIn("NDX.US", symbols)
+        self.assertIn("DJI.US", symbols)
+        self.assertIn("HSI.HK", symbols)
+        self.assertNotIn("000001.SH", symbols)
+        self.assertNotIn("399001.SZ", symbols)

@@ -18,6 +18,38 @@ from market.models import Instrument
 from shared.utils import normalize_code
 
 
+def _normalize_hk_logo_ticker(code: str) -> str | None:
+    value = str(code or "").strip().upper()
+    if not value:
+        return None
+    if value.endswith(".HK"):
+        value = value[:-3]
+    digits = re.sub(r"\D", "", value)
+    if digits:
+        # logo.dev expects HK tickers without leading zeros, e.g. 01810 -> 1810.HK
+        return f"{int(digits)}.HK"
+    return f"{value}.HK"
+
+
+def _normalize_cn_logo_ticker(code: str) -> str | None:
+    value = str(code or "").strip().upper()
+    if not value:
+        return None
+    for suffix in (".SS", ".SH", ".SZ"):
+        if value.endswith(suffix):
+            value = value[: -len(suffix)]
+            break
+    digits = re.sub(r"\D", "", value)
+    if not digits:
+        return None
+    digits = digits.zfill(6) if len(digits) <= 6 else digits
+    if digits.startswith(("5", "6", "9")):
+        return f"{digits}.SS"
+    if digits.startswith(("0", "1", "2", "3")):
+        return f"{digits}.SZ"
+    return None
+
+
 def build_logo_metadata(*, short_code: str, market: str) -> tuple[str | None, str | None]:
     code = normalize_code(short_code)
     market_code = normalize_code(market)
@@ -26,6 +58,18 @@ def build_logo_metadata(*, short_code: str, market: str) -> tuple[str | None, st
 
     if market_code == Instrument.Market.US:
         path = f"/ticker/{quote(code)}"
+        source = "logo.dev:ticker"
+    elif market_code == Instrument.Market.HK:
+        hk_code = _normalize_hk_logo_ticker(code)
+        if not hk_code:
+            return None, None
+        path = f"/ticker/{quote(hk_code)}"
+        source = "logo.dev:ticker"
+    elif market_code == Instrument.Market.CN:
+        cn_code = _normalize_cn_logo_ticker(code)
+        if not cn_code:
+            return None, None
+        path = f"/ticker/{quote(cn_code)}"
         source = "logo.dev:ticker"
     elif market_code == Instrument.Market.CRYPTO:
         path = f"/crypto/{quote(code.lower())}"

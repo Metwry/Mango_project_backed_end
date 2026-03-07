@@ -8,6 +8,8 @@ from accounts.models import Transaction
 from investment.models import InvestmentRecord
 from shared.utils import quantize_decimal
 
+from .currency_service import convert_amount_or_raise
+
 ACCOUNT_PRECISION = Decimal("0.01")
 
 
@@ -48,13 +50,21 @@ def reverse_transaction(*, user, tx_id: int) -> Transaction:
             raise ValidationError("该交易已撤销，不能重复撤销。")
         if _is_linked_investment_cashflow(tx):
             raise ValidationError("投资交易产生的资金流水不允许撤销，请使用买卖交易进行冲销。")
+        try:
+            reversed_amount = Decimal("0") - convert_amount_or_raise(
+                amount=tx.amount or Decimal("0"),
+                from_currency=tx.currency,
+                to_currency=tx.account.currency,
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc))
 
         reverse_tx = Transaction.objects.create(
             user=user,
             account=tx.account,
             counterparty=f"撤销: {tx.counterparty}",
             category_name="撤销",
-            amount=Decimal("0") - (tx.amount or Decimal("0")),
+            amount=reversed_amount,
             add_date=timezone.now(),
             reversal_of=tx,
             source=Transaction.Source.REVERSAL,

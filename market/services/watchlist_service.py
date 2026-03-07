@@ -21,11 +21,13 @@ def add_watchlist_symbol(*, user, symbol: str) -> dict:
     instrument = (
         Instrument.objects
         .filter(symbol__iexact=normalized_symbol, is_active=True)
-        .only("id", "symbol", "short_code", "name", "market", "logo_url", "logo_color")
+        .only("id", "symbol", "short_code", "name", "market", "asset_class", "logo_url", "logo_color")
         .first()
     )
     if instrument is None:
         raise ValidationError({"symbol": "未找到可用股票代码"})
+    if instrument.asset_class == Instrument.AssetClass.INDEX:
+        raise ValidationError({"symbol": "指数暂不支持加入自选，请使用指数行情接口。"})
 
     existing_subscription = (
         UserInstrumentSubscription.objects

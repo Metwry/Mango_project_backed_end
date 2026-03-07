@@ -9,6 +9,7 @@ from shared.db import check_constraint
 class Instrument(models.Model):
     class AssetClass(models.TextChoices):
         STOCK = "STOCK", _("股票 (Stock)")
+        INDEX = "INDEX", _("指数 (Index)")
         CRYPTO = "CRYPTO", _("加密货币 (Crypto)")
         FOREX = "FOREX", _("外汇 (Forex)")
 

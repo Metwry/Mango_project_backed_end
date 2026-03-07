@@ -21,15 +21,15 @@ class SyncStats:
 
 
 class Command(BaseCommand):
-    help = "Sync logo_url/logo_color/logo_source/logo_updated_at for instruments (default: US + CRYPTO)."
+    help = "Sync logo_url/logo_color/logo_source/logo_updated_at for instruments (default: US + HK + CRYPTO)."
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--markets",
             nargs="*",
-            choices=["us", "crypto"],
-            default=["us", "crypto"],
-            help="Markets to sync. Default: us crypto",
+            choices=["us", "hk", "cn", "crypto"],
+            default=["us", "hk", "crypto"],
+            help="Markets to sync. Default: us hk crypto",
         )
         parser.add_argument(
             "--force",
@@ -64,6 +64,10 @@ class Command(BaseCommand):
         target_markets = []
         if "us" in selected:
             target_markets.append(Instrument.Market.US)
+        if "hk" in selected:
+            target_markets.append(Instrument.Market.HK)
+        if "cn" in selected:
+            target_markets.append(Instrument.Market.CN)
         if "crypto" in selected:
             target_markets.append(Instrument.Market.CRYPTO)
 
