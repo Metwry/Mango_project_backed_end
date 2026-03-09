@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-"${SCRIPT_DIR}/start_celery_stack.sh" \
+"${SCRIPT_DIR}/start_celery.sh" \
   --project-root "${PROJECT_ROOT}" \
   --env-name "${ENV_NAME}" \
   --targets "all" \

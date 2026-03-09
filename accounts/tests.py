@@ -13,7 +13,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
-from accounts.models import Accounts, Transaction
+from accounts.models import Accounts, Transaction, Transfer
 from accounts.management.commands.sync_symbols import InstrumentPayload
 from accounts.services.quote_providers import fetch_crypto_quotes_binance
 from investment.models import Position
@@ -276,6 +276,7 @@ class CryptoQuoteProviderTests(SimpleTestCase):
 class AccountsBasicApiTests(APITestCase):
     account_endpoint = "/api/user/accounts/"
     tx_endpoint = "/api/user/transactions/"
+    transfer_endpoint = "/api/user/transfers/"
 
     def setUp(self):
         cache.clear()
@@ -301,6 +302,37 @@ class AccountsBasicApiTests(APITestCase):
             currency="CNY",
             balance=Decimal("1000.00"),
             status=Accounts.Status.ACTIVE,
+        )
+
+    def _create_usd_transfer_accounts(self) -> tuple[Accounts, Accounts]:
+        from_account = Accounts.objects.create(
+            user=self.user,
+            name="Transfer USD A",
+            type=Accounts.AccountType.CASH,
+            currency="USD",
+            balance=Decimal("500.00"),
+            status=Accounts.Status.ACTIVE,
+        )
+        to_account = Accounts.objects.create(
+            user=self.user,
+            name="Transfer USD B",
+            type=Accounts.AccountType.BANK,
+            currency="USD",
+            balance=Decimal("100.00"),
+            status=Accounts.Status.ACTIVE,
+        )
+        return from_account, to_account
+
+    def _create_transfer(self, *, from_account: Accounts, to_account: Accounts, amount: str = "120.00", note: str = ""):
+        return self.client.post(
+            self.transfer_endpoint,
+            {
+                "from_account_id": from_account.id,
+                "to_account_id": to_account.id,
+                "amount": amount,
+                "note": note,
+            },
+            format="json",
         )
 
     def test_account_list_only_returns_current_user_data(self):
@@ -439,7 +471,7 @@ class AccountsBasicApiTests(APITestCase):
         self.assertEqual(delete_resp.data["visible_deleted"], 1)
 
         self.account.refresh_from_db()
-        self.assertEqual(self.account.balance, Decimal("1000.00"))
+        self.assertEqual(self.account.balance, Decimal("950.00"))
         self.assertFalse(Transaction.objects.filter(id=tx_id).exists())
 
     def test_delete_activity_transactions_endpoint(self):
@@ -480,6 +512,9 @@ class AccountsBasicApiTests(APITestCase):
             source=Transaction.Source.INVESTMENT,
         )
 
+        self.account.refresh_from_db()
+        balance_before_delete = self.account.balance
+
         delete_investment_resp = self.client.post(
             f"{self.tx_endpoint}delete/",
             {"mode": "activity", "activity_type": "investment"},
@@ -508,7 +543,7 @@ class AccountsBasicApiTests(APITestCase):
         self.assertFalse(Transaction.objects.filter(id=manual_id).exists())
 
         self.account.refresh_from_db()
-        self.assertEqual(self.account.balance, Decimal("1000.00"))
+        self.assertEqual(self.account.balance, balance_before_delete)
 
     def test_transaction_create_rejects_investment_account(self):
         investment_account = Accounts.objects.create(
@@ -578,7 +613,7 @@ class AccountsBasicApiTests(APITestCase):
         self.assertEqual(reversal_tx.currency, "USD")
         self.assertEqual(reversal_tx.amount, Decimal("100.00"))
 
-    def test_delete_single_transaction_after_account_currency_change_converts_amount(self):
+    def test_delete_single_transaction_after_account_currency_change_keeps_current_balance(self):
         create_resp = self.client.post(
             self.tx_endpoint,
             {
@@ -608,7 +643,7 @@ class AccountsBasicApiTests(APITestCase):
 
         self.account.refresh_from_db()
         self.assertEqual(self.account.currency, "USD")
-        self.assertEqual(self.account.balance, Decimal("142.86"))
+        self.assertEqual(self.account.balance, Decimal("42.86"))
         self.assertFalse(Transaction.objects.filter(id=tx_id).exists())
 
     def test_reverse_transaction_after_account_currency_change_fails_when_rate_pair_missing(self):
@@ -652,7 +687,7 @@ class AccountsBasicApiTests(APITestCase):
         self.assertEqual(self.account.balance, Decimal("42.86"))
         self.assertFalse(Transaction.objects.filter(reversal_of_id=tx_id).exists())
 
-    def test_delete_single_transaction_after_account_currency_change_fails_when_rate_pair_missing(self):
+    def test_delete_single_transaction_after_account_currency_change_does_not_require_fx_rate(self):
         create_resp = self.client.post(
             self.tx_endpoint,
             {
@@ -689,13 +724,11 @@ class AccountsBasicApiTests(APITestCase):
             {"mode": "single", "transaction_id": tx_id},
             format="json",
         )
-        self.assertEqual(delete_resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("message", delete_resp.data)
-        self.assertIn("CNY/USD", delete_resp.data["message"])
+        self.assertEqual(delete_resp.status_code, status.HTTP_200_OK)
 
         self.account.refresh_from_db()
         self.assertEqual(self.account.balance, Decimal("42.86"))
-        self.assertTrue(Transaction.objects.filter(id=tx_id).exists())
+        self.assertFalse(Transaction.objects.filter(id=tx_id).exists())
 
     def test_account_currency_change_fails_when_rate_pair_missing(self):
         cache.set(
@@ -721,6 +754,152 @@ class AccountsBasicApiTests(APITestCase):
         self.assertEqual(self.account.currency, "CNY")
         self.assertEqual(self.account.balance, Decimal("1000.00"))
 
+    def test_create_transfer_success_writes_two_transactions_and_updates_balances(self):
+        from_account, to_account = self._create_usd_transfer_accounts()
+
+        resp = self._create_transfer(
+            from_account=from_account,
+            to_account=to_account,
+            amount="120.00",
+            note="账户互转",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data["status"], Transfer.Status.SUCCESS)
+        self.assertEqual(resp.data["currency"], "USD")
+        self.assertEqual(resp.data["amount"], "120.00")
+
+        from_account.refresh_from_db()
+        to_account.refresh_from_db()
+        self.assertEqual(from_account.balance, Decimal("380.00"))
+        self.assertEqual(to_account.balance, Decimal("220.00"))
+
+        transfer = Transfer.objects.get(pk=resp.data["id"])
+        out_tx = Transaction.objects.get(pk=transfer.out_transaction_id)
+        in_tx = Transaction.objects.get(pk=transfer.in_transaction_id)
+
+        self.assertEqual(out_tx.source, Transaction.Source.TRANSFER)
+        self.assertEqual(out_tx.counterparty, to_account.name)
+        self.assertEqual(out_tx.category_name, "转账")
+        self.assertEqual(out_tx.remark, "转出")
+        self.assertEqual(out_tx.amount, Decimal("-120.00"))
+        self.assertEqual(out_tx.balance_after, Decimal("380.00"))
+
+        self.assertEqual(in_tx.source, Transaction.Source.TRANSFER)
+        self.assertEqual(in_tx.counterparty, from_account.name)
+        self.assertEqual(in_tx.category_name, "转账")
+        self.assertEqual(in_tx.remark, "转入")
+        self.assertEqual(in_tx.amount, Decimal("120.00"))
+        self.assertEqual(in_tx.balance_after, Decimal("220.00"))
+
+    def test_create_transfer_rejects_currency_mismatch(self):
+        from_account, _ = self._create_usd_transfer_accounts()
+
+        resp = self._create_transfer(
+            from_account=from_account,
+            to_account=self.account,
+            amount="10.00",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("to_account_id", resp.data)
+        self.assertEqual(Transfer.objects.count(), 0)
+
+    def test_create_transfer_rejects_investment_account(self):
+        _, to_account = self._create_usd_transfer_accounts()
+        investment_account = Accounts.objects.create(
+            user=self.user,
+            name="投资账户",
+            type=Accounts.AccountType.INVESTMENT,
+            currency="USD",
+            balance=Decimal("300.00"),
+            status=Accounts.Status.ACTIVE,
+        )
+
+        resp = self._create_transfer(
+            from_account=investment_account,
+            to_account=to_account,
+            amount="10.00",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("from_account_id", resp.data)
+        self.assertEqual(Transfer.objects.count(), 0)
+
+    def test_reverse_transfer_from_outgoing_transaction_reverses_whole_transfer(self):
+        from_account, to_account = self._create_usd_transfer_accounts()
+        create_resp = self._create_transfer(from_account=from_account, to_account=to_account, amount="120.00")
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+
+        out_tx_id = create_resp.data["out_transaction_id"]
+        reverse_resp = self.client.post(f"{self.tx_endpoint}{out_tx_id}/reverse/", {}, format="json")
+
+        self.assertEqual(reverse_resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(reverse_resp.data["status"], Transfer.Status.REVERSED)
+
+        from_account.refresh_from_db()
+        to_account.refresh_from_db()
+        self.assertEqual(from_account.balance, Decimal("500.00"))
+        self.assertEqual(to_account.balance, Decimal("100.00"))
+
+        transfer = Transfer.objects.get(pk=create_resp.data["id"])
+        self.assertEqual(transfer.status, Transfer.Status.REVERSED)
+        self.assertIsNotNone(transfer.reversed_out_transaction_id)
+        self.assertIsNotNone(transfer.reversed_in_transaction_id)
+        self.assertEqual(Transaction.objects.filter(source=Transaction.Source.REVERSAL).count(), 2)
+
+    def test_reverse_transfer_from_incoming_transaction_reverses_whole_transfer(self):
+        from_account, to_account = self._create_usd_transfer_accounts()
+        create_resp = self._create_transfer(from_account=from_account, to_account=to_account, amount="80.00")
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+
+        in_tx_id = create_resp.data["in_transaction_id"]
+        reverse_resp = self.client.post(f"{self.tx_endpoint}{in_tx_id}/reverse/", {}, format="json")
+
+        self.assertEqual(reverse_resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(reverse_resp.data["status"], Transfer.Status.REVERSED)
+
+        from_account.refresh_from_db()
+        to_account.refresh_from_db()
+        self.assertEqual(from_account.balance, Decimal("500.00"))
+        self.assertEqual(to_account.balance, Decimal("100.00"))
+
+    def test_reverse_transfer_from_transfer_endpoint(self):
+        from_account, to_account = self._create_usd_transfer_accounts()
+        create_resp = self._create_transfer(from_account=from_account, to_account=to_account, amount="60.00")
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+
+        reverse_resp = self.client.post(f"{self.transfer_endpoint}{create_resp.data['id']}/reverse/", {}, format="json")
+
+        self.assertEqual(reverse_resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(reverse_resp.data["status"], Transfer.Status.REVERSED)
+
+        from_account.refresh_from_db()
+        to_account.refresh_from_db()
+        self.assertEqual(from_account.balance, Decimal("500.00"))
+        self.assertEqual(to_account.balance, Decimal("100.00"))
+
+    def test_transaction_activity_type_transfer_returns_transfer_rows(self):
+        from_account, to_account = self._create_usd_transfer_accounts()
+        create_resp = self._create_transfer(from_account=from_account, to_account=to_account, amount="40.00")
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+
+        list_resp = self.client.get(f"{self.tx_endpoint}?activity_type=transfer")
+
+        self.assertEqual(list_resp.status_code, status.HTTP_200_OK)
+        result_ids = {item["id"] for item in list_resp.data["results"]}
+        self.assertEqual(result_ids, {create_resp.data["out_transaction_id"], create_resp.data["in_transaction_id"]})
+
+    def test_delete_transfer_transaction_is_blocked(self):
+        from_account, to_account = self._create_usd_transfer_accounts()
+        create_resp = self._create_transfer(from_account=from_account, to_account=to_account, amount="50.00")
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+
+        delete_resp = self.client.delete(f"{self.tx_endpoint}{create_resp.data['out_transaction_id']}/")
+
+        self.assertEqual(delete_resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("transaction_id", delete_resp.data)
+
     def test_investment_account_balance_prefers_latest_snapshot(self):
         investment_account = Accounts.objects.create(
             user=self.user,
@@ -735,15 +914,38 @@ class AccountsBasicApiTests(APITestCase):
             snapshot_level=SnapshotLevel.M15,
             snapshot_time="2026-03-04T00:00:00Z",
             account_currency="USD",
-            balance_native=Decimal("1234.56"),
-            balance_usd=Decimal("1234.56"),
+            balance_native=Decimal("1234.567891"),
+            balance_usd=Decimal("1234.567891"),
             data_status=SnapshotDataStatus.OK,
         )
 
         resp = self.client.get(self.account_endpoint)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         target = next(item for item in resp.data if item["id"] == investment_account.id)
-        self.assertEqual(target["balance"], "1234.560000")
+        self.assertEqual(target["balance"], "1234.567891")
+
+    def test_investment_account_detail_balance_returns_high_precision_snapshot_value(self):
+        investment_account = Accounts.objects.create(
+            user=self.user,
+            name="投资账户",
+            type=Accounts.AccountType.INVESTMENT,
+            currency="USD",
+            balance=Decimal("9999.99"),
+            status=Accounts.Status.ACTIVE,
+        )
+        AccountSnapshot.objects.create(
+            account=investment_account,
+            snapshot_level=SnapshotLevel.M15,
+            snapshot_time="2026-03-04T00:00:00Z",
+            account_currency="USD",
+            balance_native=Decimal("88.888888"),
+            balance_usd=Decimal("88.888888"),
+            data_status=SnapshotDataStatus.OK,
+        )
+
+        resp = self.client.get(f"{self.account_endpoint}{investment_account.id}/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["balance"], "88.888888")
 
     def test_delete_normal_account_archives_and_keeps_transactions(self):
         tx_resp = self.client.post(

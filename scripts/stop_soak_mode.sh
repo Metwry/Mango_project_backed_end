@@ -22,4 +22,4 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-"${SCRIPT_DIR}/stop_celery_stack.sh" --project-root "${PROJECT_ROOT}" --log-dir "${LOG_DIR}"
+"${SCRIPT_DIR}/stop_celery.sh" --project-root "${PROJECT_ROOT}" --log-dir "${LOG_DIR}"

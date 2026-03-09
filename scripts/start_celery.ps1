@@ -5,6 +5,7 @@ param(
     [switch]$WithBeat,
     [string]$Pool = "solo",
     [string]$LogDir = "tmp_celery_logs",
+    [string]$StateDir = "tmp_celery_state",
     [switch]$FollowLogs,
     [int]$TailLines = 50,
     [switch]$FakeProvider,
@@ -27,6 +28,11 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
 $resolvedLogDir = Join-Path $ProjectRoot $LogDir
 if (!(Test-Path $resolvedLogDir)) {
     New-Item -ItemType Directory -Path $resolvedLogDir | Out-Null
+}
+
+$resolvedStateDir = Join-Path $ProjectRoot $StateDir
+if (!(Test-Path $resolvedStateDir)) {
+    New-Item -ItemType Directory -Path $resolvedStateDir | Out-Null
 }
 
 function Normalize-Targets([string[]]$rawTargets) {
@@ -60,72 +66,110 @@ function Normalize-Targets([string[]]$rawTargets) {
     return @($out)
 }
 
-$targetWorkers = Normalize-Targets $Targets
-
-$commonEnv = @"
-cd '$ProjectRoot'
-"@
-
-if ($FakeProvider) {
-    $commonEnv += @"
-`$env:MARKET_QUOTE_PROVIDER='fake'
-"@
+function Quote-PS([string]$value) {
+    return "'" + ($value -replace "'", "''") + "'"
 }
 
-if ($MarketSyncEverySeconds -gt 0) {
-    $commonEnv += @"
-`$env:MARKET_SYNC_TEST_EVERY_SECONDS='$MarketSyncEverySeconds'
-"@
-}
-if ($SnapshotCaptureEverySeconds -gt 0) {
-    $commonEnv += @"
-`$env:SNAPSHOT_CAPTURE_TEST_EVERY_SECONDS='$SnapshotCaptureEverySeconds'
-"@
-}
-if ($SnapshotAggH4EverySeconds -gt 0) {
-    $commonEnv += @"
-`$env:SNAPSHOT_AGG_H4_TEST_EVERY_SECONDS='$SnapshotAggH4EverySeconds'
-"@
-}
-if ($SnapshotAggD1EverySeconds -gt 0) {
-    $commonEnv += @"
-`$env:SNAPSHOT_AGG_D1_TEST_EVERY_SECONDS='$SnapshotAggD1EverySeconds'
-"@
-}
-if ($SnapshotAggMon1EverySeconds -gt 0) {
-    $commonEnv += @"
-`$env:SNAPSHOT_AGG_MON1_TEST_EVERY_SECONDS='$SnapshotAggMon1EverySeconds'
-"@
-}
-if ($SnapshotCleanupEverySeconds -gt 0) {
-    $commonEnv += @"
-`$env:SNAPSHOT_CLEANUP_TEST_EVERY_SECONDS='$SnapshotCleanupEverySeconds'
-"@
+function Resolve-CondaPython([string]$envName) {
+    if (Test-Path $envName) {
+        $candidate = Join-Path (Resolve-Path $envName).Path "python.exe"
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    $condaCmd = Get-Command conda -ErrorAction SilentlyContinue
+    if (!$condaCmd) {
+        throw "Could not find 'conda' on PATH. Pass -EnvName with a conda env path or add conda to PATH."
+    }
+
+    $envList = & $condaCmd.Source env list --json | ConvertFrom-Json
+    foreach ($envPath in $envList.envs) {
+        $isExactPath = $envPath -ieq $envName
+        $isNameMatch = (Split-Path $envPath -Leaf) -ieq $envName
+        if ($isExactPath -or $isNameMatch) {
+            $pythonPath = Join-Path $envPath "python.exe"
+            if (Test-Path $pythonPath) {
+                return $pythonPath
+            }
+        }
+    }
+
+    throw "Could not resolve python.exe for conda env '$envName'."
 }
 
-function Start-StackProcess([string]$name, [string]$command, [string]$logPath) {
-    $script = $commonEnv + "`n" + "conda run --no-capture-output -n $EnvName $command *> '$logPath'"
+function Start-CeleryProcess(
+    [string]$Name,
+    [string[]]$CeleryArgs,
+    [string]$PythonPath,
+    [string]$ProjectDir,
+    [string]$LogPath,
+    [hashtable]$ProcessEnv
+) {
+    $lines = @(
+        '$ErrorActionPreference = ''Stop'''
+        ("Set-Location " + (Quote-PS $ProjectDir))
+    )
+
+    foreach ($key in $ProcessEnv.Keys) {
+        $lines += ('$env:' + $key + '=' + (Quote-PS ([string]$ProcessEnv[$key])))
+    }
+
+    $quotedArgs = @((Quote-PS $PythonPath), "-m", "celery")
+    foreach ($arg in $CeleryArgs) {
+        $quotedArgs += (Quote-PS $arg)
+    }
+
+    $lines += ("& " + ($quotedArgs -join " ") + " *> " + (Quote-PS $LogPath))
+    $script = $lines -join "`n"
+
     return Start-Process pwsh -ArgumentList @("-NoProfile", "-Command", $script) -PassThru
 }
 
+$targetWorkers = Normalize-Targets $Targets
+$pythonPath = Resolve-CondaPython $EnvName
+
 $commands = @{
-    "market_sync" = "celery -A mango_project worker -n market_sync@%h -Q market_sync -l info -P $Pool"
-    "snapshot_capture" = "celery -A mango_project worker -n snapshot_capture@%h -Q snapshot_capture -l info -P $Pool"
-    "snapshot_aggregate" = "celery -A mango_project worker -n snapshot_aggregate@%h -Q snapshot_aggregate -l info -P $Pool"
-    "snapshot_cleanup" = "celery -A mango_project worker -n snapshot_cleanup@%h -Q snapshot_cleanup -l info -P $Pool"
+    "market_sync" = @("-A", "mango_project", "worker", "-n", "market_sync@%h", "-Q", "market_sync", "-l", "info", "-P", $Pool)
+    "snapshot_capture" = @("-A", "mango_project", "worker", "-n", "snapshot_capture@%h", "-Q", "snapshot_capture", "-l", "info", "-P", $Pool)
+    "snapshot_aggregate" = @("-A", "mango_project", "worker", "-n", "snapshot_aggregate@%h", "-Q", "snapshot_aggregate", "-l", "info", "-P", $Pool)
+    "snapshot_cleanup" = @("-A", "mango_project", "worker", "-n", "snapshot_cleanup@%h", "-Q", "snapshot_cleanup", "-l", "info", "-P", $Pool)
+}
+
+$processEnv = @{}
+if ($FakeProvider) {
+    $processEnv["MARKET_QUOTE_PROVIDER"] = "fake"
+}
+if ($MarketSyncEverySeconds -gt 0) {
+    $processEnv["MARKET_SYNC_TEST_EVERY_SECONDS"] = "$MarketSyncEverySeconds"
+}
+if ($SnapshotCaptureEverySeconds -gt 0) {
+    $processEnv["SNAPSHOT_CAPTURE_TEST_EVERY_SECONDS"] = "$SnapshotCaptureEverySeconds"
+}
+if ($SnapshotAggH4EverySeconds -gt 0) {
+    $processEnv["SNAPSHOT_AGG_H4_TEST_EVERY_SECONDS"] = "$SnapshotAggH4EverySeconds"
+}
+if ($SnapshotAggD1EverySeconds -gt 0) {
+    $processEnv["SNAPSHOT_AGG_D1_TEST_EVERY_SECONDS"] = "$SnapshotAggD1EverySeconds"
+}
+if ($SnapshotAggMon1EverySeconds -gt 0) {
+    $processEnv["SNAPSHOT_AGG_MON1_TEST_EVERY_SECONDS"] = "$SnapshotAggMon1EverySeconds"
+}
+if ($SnapshotCleanupEverySeconds -gt 0) {
+    $processEnv["SNAPSHOT_CLEANUP_TEST_EVERY_SECONDS"] = "$SnapshotCleanupEverySeconds"
 }
 
 $records = @()
 if ($WithBeat) {
     $beatLog = Join-Path $resolvedLogDir "beat.log"
-    $beatProc = Start-StackProcess -name "beat" -command "celery -A mango_project beat -l info" -logPath $beatLog
+    $beatSchedule = Join-Path $resolvedStateDir "celerybeat-schedule"
+    $beatProc = Start-CeleryProcess -Name "beat" -CeleryArgs @("-A", "mango_project", "beat", "-l", "info", "--schedule", $beatSchedule) -PythonPath $pythonPath -ProjectDir $ProjectRoot -LogPath $beatLog -ProcessEnv $processEnv
     $records += [PSCustomObject]@{ Name = "beat"; Pid = $beatProc.Id; Log = $beatLog }
 }
 
 foreach ($name in $targetWorkers) {
-    $cmd = $commands[$name]
     $log = Join-Path $resolvedLogDir "$name.log"
-    $proc = Start-StackProcess -name $name -command $cmd -logPath $log
+    $proc = Start-CeleryProcess -Name $name -CeleryArgs $commands[$name] -PythonPath $pythonPath -ProjectDir $ProjectRoot -LogPath $log -ProcessEnv $processEnv
     $records += [PSCustomObject]@{ Name = $name; Pid = $proc.Id; Log = $log }
 }
 
@@ -137,13 +181,14 @@ foreach ($r in $records) {
 
 Write-Host "Started celery stack."
 Write-Host "ProjectRoot: $ProjectRoot"
-Write-Host "Conda Env: $EnvName"
+Write-Host "Python: $pythonPath"
 Write-Host "LogDir: $resolvedLogDir"
+Write-Host "StateDir: $resolvedStateDir"
 Write-Host "PID file: $pidFile"
 Write-Host "Processes:"
 $records | Format-Table -AutoSize
 
-Start-Sleep -Milliseconds 800
+Start-Sleep -Milliseconds 1000
 $exited = @()
 foreach ($r in $records) {
     try {

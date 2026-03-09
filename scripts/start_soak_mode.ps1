@@ -17,7 +17,7 @@ if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
     $ProjectRoot = (Resolve-Path $ProjectRoot).Path
 }
 
-$startScript = Join-Path $PSScriptRoot "start_celery_stack.ps1"
+$startScript = Join-Path $PSScriptRoot "start_celery.ps1"
 & powershell -ExecutionPolicy Bypass -File $startScript `
     -ProjectRoot $ProjectRoot `
     -EnvName $EnvName `
@@ -34,5 +34,5 @@ $startScript = Join-Path $PSScriptRoot "start_celery_stack.ps1"
     -SnapshotCleanupEverySeconds $CleanupSeconds
 
 if ($LASTEXITCODE -ne 0) {
-    throw "Failed to start soak mode via start_celery_stack.ps1"
+    throw "Failed to start soak mode via scripts/start_celery.ps1"
 }

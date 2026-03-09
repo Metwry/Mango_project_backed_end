@@ -1,7 +1,9 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
-from .models import Accounts, Transaction
+from .models import Accounts, Transaction, Transfer
 from snapshot.models import AccountSnapshot
 
 
@@ -90,6 +92,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             "counterparty",
             "amount",
             "category_name",
+            "remark",
             "currency",
             "account",
             "account_name",
@@ -149,3 +152,62 @@ class TransactionDeleteRequestSerializer(serializers.Serializer):
         if attrs.get("activity_type") is None:
             raise serializers.ValidationError({"activity_type": "mode=activity 时必填"})
         return attrs
+
+
+class TransferCreateSerializer(serializers.Serializer):
+    from_account_id = serializers.IntegerField(min_value=1)
+    to_account_id = serializers.IntegerField(min_value=1)
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
+    note = serializers.CharField(required=False, allow_blank=True, max_length=64)
+
+
+class TransferAccountSummarySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    currency = serializers.CharField()
+    balance_after = serializers.CharField()
+
+
+class TransferSerializer(serializers.ModelSerializer):
+    from_account = serializers.SerializerMethodField()
+    to_account = serializers.SerializerMethodField()
+    out_transaction_id = serializers.IntegerField(read_only=True)
+    in_transaction_id = serializers.IntegerField(read_only=True)
+    reversed_out_transaction_id = serializers.IntegerField(read_only=True)
+    reversed_in_transaction_id = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Transfer
+        fields = [
+            "id",
+            "currency",
+            "amount",
+            "status",
+            "note",
+            "from_account",
+            "to_account",
+            "out_transaction_id",
+            "in_transaction_id",
+            "reversed_out_transaction_id",
+            "reversed_in_transaction_id",
+            "created_at",
+            "reversed_at",
+        ]
+        read_only_fields = fields
+
+    @staticmethod
+    def _account_payload(*, account: Accounts, balance_after) -> dict:
+        return {
+            "id": account.id,
+            "name": account.name,
+            "currency": account.currency,
+            "balance_after": str(balance_after),
+        }
+
+    def get_from_account(self, obj: Transfer) -> dict:
+        balance_after = obj.out_transaction.balance_after if obj.out_transaction_id else obj.from_account.balance
+        return self._account_payload(account=obj.from_account, balance_after=balance_after)
+
+    def get_to_account(self, obj: Transfer) -> dict:
+        balance_after = obj.in_transaction.balance_after if obj.in_transaction_id else obj.to_account.balance
+        return self._account_payload(account=obj.to_account, balance_after=balance_after)

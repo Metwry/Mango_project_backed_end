@@ -1,29 +1,18 @@
 param(
-    [string]$ProjectRoot = "C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project",
+    [string]$ProjectRoot = "",
     [string]$LogDir = "tmp_stress_logs"
 )
 
 $ErrorActionPreference = "Stop"
-$resolvedRoot = (Resolve-Path $ProjectRoot).Path
-$resolvedLogDir = Join-Path $resolvedRoot $LogDir
-$pidFile = Join-Path $resolvedLogDir "soak_pids.txt"
-
-if (!(Test-Path $pidFile)) {
-    Write-Host "PID file not found: $pidFile"
-    exit 0
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+} else {
+    $ProjectRoot = (Resolve-Path $ProjectRoot).Path
 }
 
-$pids = Get-Content $pidFile | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' }
-foreach ($pid in $pids) {
-    try {
-        $proc = Get-Process -Id ([int]$pid) -ErrorAction Stop
-        Stop-Process -Id $proc.Id -Force -ErrorAction Stop
-        Write-Host "Stopped PID $pid"
-    }
-    catch {
-        Write-Host "PID $pid already stopped"
-    }
-}
+$stopScript = Join-Path $PSScriptRoot "stop_celery.ps1"
+& powershell -ExecutionPolicy Bypass -File $stopScript -ProjectRoot $ProjectRoot -LogDir $LogDir
 
-Remove-Item $pidFile -Force
-Write-Host "Soak mode stopped."
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to stop soak mode via scripts/stop_celery.ps1"
+}

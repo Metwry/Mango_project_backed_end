@@ -65,6 +65,7 @@ class Transaction(models.Model):
     class Source(models.TextChoices):
         MANUAL = "manual", "手工记账"
         INVESTMENT = "investment", "投资交易"
+        TRANSFER = "transfer", "账户转账"
         REVERSAL = "reversal", "冲正流水"
 
     counterparty = models.CharField(max_length=32)
@@ -73,6 +74,7 @@ class Transaction(models.Model):
     balance_after = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     category_name = models.CharField(max_length=24)
+    remark = models.CharField(max_length=16, blank=True, default="")
     currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.CNY)
 
     add_date = models.DateTimeField(default=timezone.now)
@@ -161,3 +163,76 @@ class Transaction(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValueError("不允许删除交易记录。请使用撤销功能。")
+
+
+class Transfer(models.Model):
+    class Status(models.TextChoices):
+        SUCCESS = "success", "成功"
+        REVERSED = "reversed", "已撤销"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="transfers",
+        db_index=True,
+    )
+    from_account = models.ForeignKey(
+        Accounts,
+        on_delete=models.PROTECT,
+        related_name="outgoing_transfers",
+    )
+    to_account = models.ForeignKey(
+        Accounts,
+        on_delete=models.PROTECT,
+        related_name="incoming_transfers",
+    )
+    currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.CNY)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    note = models.CharField(max_length=64, blank=True, default="")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.SUCCESS, db_index=True)
+    out_transaction = models.OneToOneField(
+        "accounts.Transaction",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="transfer_outbound",
+    )
+    in_transaction = models.OneToOneField(
+        "accounts.Transaction",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="transfer_inbound",
+    )
+    reversed_out_transaction = models.OneToOneField(
+        "accounts.Transaction",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="transfer_reversed_outbound",
+    )
+    reversed_in_transaction = models.OneToOneField(
+        "accounts.Transaction",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="transfer_reversed_inbound",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "accounts_transfer"
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["user", "-created_at", "-id"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(from_account=models.F("to_account")),
+                name="transfer_from_to_account_not_equal",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.from_account_id}->{self.to_account_id} {self.currency} {self.amount}"

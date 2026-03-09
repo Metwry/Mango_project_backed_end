@@ -10,6 +10,7 @@ docs/
 .vscode/
 
 tmp_stress_logs/
+tmp_celery_state/
 celerybeat-schedule*
 logo_downloads/
 

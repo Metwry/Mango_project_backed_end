@@ -1,6 +1,6 @@
 ﻿name,pid,log
-beat,35960,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\beat.log
-market_sync,9016,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\market_sync.log
-snapshot_capture,8072,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\snapshot_capture.log
-snapshot_aggregate,54292,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\snapshot_aggregate.log
-snapshot_cleanup,32132,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\snapshot_cleanup.log
+beat,42068,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\beat.log
+market_sync,25096,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\market_sync.log
+snapshot_capture,42360,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\snapshot_capture.log
+snapshot_aggregate,38976,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\snapshot_aggregate.log
+snapshot_cleanup,33216,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\tmp_celery_logs\snapshot_cleanup.log

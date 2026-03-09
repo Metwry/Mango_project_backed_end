@@ -9,6 +9,7 @@ from investment.models import InvestmentRecord
 from shared.utils import quantize_decimal
 
 from .currency_service import convert_amount_or_raise
+from .transfer_service import get_transfer_by_transaction, reverse_transfer as reverse_transfer_business
 
 ACCOUNT_PRECISION = Decimal("0.01")
 
@@ -35,7 +36,7 @@ def _is_linked_investment_cashflow(tx: Transaction) -> bool:
     return False
 
 
-def reverse_transaction(*, user, tx_id: int) -> Transaction:
+def reverse_transaction(*, user, tx_id: int) -> Transaction | tuple[str, object]:
     with db_transaction.atomic():
         tx = (
             Transaction.objects
@@ -48,6 +49,11 @@ def reverse_transaction(*, user, tx_id: int) -> Transaction:
             raise ValidationError("撤销交易不能再次撤销。")
         if tx.reversed_at is not None:
             raise ValidationError("该交易已撤销，不能重复撤销。")
+        if tx.source == Transaction.Source.TRANSFER:
+            transfer = get_transfer_by_transaction(user=user, transaction_id=tx.id)
+            if transfer is None:
+                raise ValidationError("转账不存在或无权限。")
+            return "transfer", reverse_transfer_business(user=user, transfer_id=transfer.id)
         if _is_linked_investment_cashflow(tx):
             raise ValidationError("投资交易产生的资金流水不允许撤销，请使用买卖交易进行冲销。")
         try:
