@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>cc.mango.redis</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/opt/homebrew/opt/redis/bin/redis-server</string>
+      <string>/opt/homebrew/etc/redis.conf</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/opt/homebrew/var</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>UserName</key>
+    <string>wry</string>
+    <key>StandardOutPath</key>
+    <string>/opt/homebrew/var/log/redis.log</string>
+    <key>StandardErrorPath</key>
+    <string>/opt/homebrew/var/log/redis.log</string>
+  </dict>
+</plist>

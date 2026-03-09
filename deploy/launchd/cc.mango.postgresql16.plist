@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>cc.mango.postgresql16</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/opt/homebrew/opt/postgresql@16/bin/postgres</string>
+      <string>-D</string>
+      <string>/opt/homebrew/var/postgresql@16</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/opt/homebrew</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>UserName</key>
+    <string>wry</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>LC_ALL</key>
+      <string>en_US.UTF-8</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/opt/homebrew/var/log/postgresql@16.log</string>
+    <key>StandardErrorPath</key>
+    <string>/opt/homebrew/var/log/postgresql@16.log</string>
+  </dict>
+</plist>
