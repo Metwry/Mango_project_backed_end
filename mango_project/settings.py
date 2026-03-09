@@ -125,7 +125,6 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
-     # 找到当前用户id
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -359,8 +358,8 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.163.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "465"))
-EMAIL_USE_SSL = _env_bool("EMAIL_USE_SSL", "true")          # 465 用 SSL
-EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", "false")         # SSL 与 TLS 二选一，别同时开
+EMAIL_USE_SSL = _env_bool("EMAIL_USE_SSL", "true")
+EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", "false")
 
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
