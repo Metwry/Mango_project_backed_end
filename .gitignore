@@ -16,3 +16,4 @@ logo_downloads/
 
 *.log
 *.sqlite3
+.DS_Store
