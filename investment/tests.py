@@ -118,6 +118,27 @@ class InvestmentBasicApiTests(APITestCase):
             },
         )
 
+    def test_buy_revalues_investment_account_using_cost_when_quote_missing(self):
+        buy_resp = self.client.post(
+            self.buy_endpoint,
+            {
+                "instrument_id": self.us_instrument.id,
+                "quantity": "2.000000",
+                "price": "10.000000",
+                "cash_account_id": self.usd_account.id,
+            },
+            format="json",
+        )
+        self.assertEqual(buy_resp.status_code, status.HTTP_201_CREATED)
+
+        investment_account = Accounts.objects.get(
+            user=self.user,
+            type=Accounts.AccountType.INVESTMENT,
+            name=INVESTMENT_ACCOUNT_NAME,
+        )
+        self.assertEqual(investment_account.currency, "CNY")
+        self.assertEqual(investment_account.balance, Decimal("140.00"))
+
     def test_buy_rejects_index_instrument(self):
         index_instrument = Instrument.objects.create(
             symbol="SPX.US",

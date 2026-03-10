@@ -19,7 +19,7 @@ from accounts.services.quote_providers import fetch_crypto_quotes_binance
 from investment.models import Position
 from market.models import Instrument
 from accounts.services.quote_fetcher import _to_billion_amount
-from market.services.cache_keys import USD_EXCHANGE_RATES_KEY
+from market.services.cache_keys import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
 from snapshot.models import AccountSnapshot, SnapshotDataStatus, SnapshotLevel
 
 
@@ -900,13 +900,13 @@ class AccountsBasicApiTests(APITestCase):
         self.assertEqual(delete_resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("transaction_id", delete_resp.data)
 
-    def test_investment_account_balance_prefers_latest_snapshot(self):
+    def test_investment_account_balance_returns_current_account_balance(self):
         investment_account = Accounts.objects.create(
             user=self.user,
             name="投资账户",
             type=Accounts.AccountType.INVESTMENT,
             currency="USD",
-            balance=Decimal("9999.99"),
+            balance=Decimal("77.77"),
             status=Accounts.Status.ACTIVE,
         )
         AccountSnapshot.objects.create(
@@ -922,15 +922,15 @@ class AccountsBasicApiTests(APITestCase):
         resp = self.client.get(self.account_endpoint)
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         target = next(item for item in resp.data if item["id"] == investment_account.id)
-        self.assertEqual(target["balance"], "1234.567891")
+        self.assertEqual(target["balance"], "77.77")
 
-    def test_investment_account_detail_balance_returns_high_precision_snapshot_value(self):
+    def test_investment_account_detail_returns_current_account_balance(self):
         investment_account = Accounts.objects.create(
             user=self.user,
             name="投资账户",
             type=Accounts.AccountType.INVESTMENT,
             currency="USD",
-            balance=Decimal("9999.99"),
+            balance=Decimal("66.66"),
             status=Accounts.Status.ACTIVE,
         )
         AccountSnapshot.objects.create(
@@ -945,15 +945,15 @@ class AccountsBasicApiTests(APITestCase):
 
         resp = self.client.get(f"{self.account_endpoint}{investment_account.id}/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp.data["balance"], "88.888888")
+        self.assertEqual(resp.data["balance"], "66.66")
 
-    def test_investment_account_currency_change_response_ignores_stale_snapshot_of_old_currency(self):
+    def test_investment_account_currency_change_revalues_from_live_positions_not_snapshot(self):
         investment_account = Accounts.objects.create(
             user=self.user,
             name="投资账户",
             type=Accounts.AccountType.INVESTMENT,
             currency="CNY",
-            balance=Decimal("268.00"),
+            balance=Decimal("0.00"),
             status=Accounts.Status.ACTIVE,
         )
         instrument = Instrument.objects.create(
@@ -966,12 +966,30 @@ class AccountsBasicApiTests(APITestCase):
             base_currency="USD",
             is_active=True,
         )
+        cache.set(
+            WATCHLIST_QUOTES_KEY,
+            {
+                "updated_at": "2026-03-04T00:00:00+08:00",
+                "updated_markets": ["US"],
+                "stale_markets": [],
+                "data": {
+                    "US": [
+                        {
+                            "short_code": "AAPL",
+                            "name": "Apple Inc.",
+                            "price": 12.0,
+                        }
+                    ]
+                },
+            },
+            timeout=None,
+        )
         Position.objects.create(
             user=self.user,
             instrument=instrument,
-            quantity=Decimal("1.000000"),
+            quantity=Decimal("2.000000"),
             avg_cost=Decimal("10.000000"),
-            cost_total=Decimal("10.000000"),
+            cost_total=Decimal("20.000000"),
             realized_pnl_total=Decimal("0"),
         )
         AccountSnapshot.objects.create(
@@ -979,8 +997,8 @@ class AccountsBasicApiTests(APITestCase):
             snapshot_level=SnapshotLevel.M15,
             snapshot_time="2026-03-04T00:00:00Z",
             account_currency="CNY",
-            balance_native=Decimal("268.000000"),
-            balance_usd=Decimal("38.285714"),
+            balance_native=Decimal("999.000000"),
+            balance_usd=Decimal("142.714286"),
             data_status=SnapshotDataStatus.OK,
         )
 
@@ -992,15 +1010,15 @@ class AccountsBasicApiTests(APITestCase):
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["currency"], "USD")
-        self.assertEqual(resp.data["balance"], "38.29")
+        self.assertEqual(resp.data["balance"], "24.00")
 
         investment_account.refresh_from_db()
         self.assertEqual(investment_account.currency, "USD")
-        self.assertEqual(investment_account.balance, Decimal("38.29"))
+        self.assertEqual(investment_account.balance, Decimal("24.00"))
 
         detail_resp = self.client.get(f"{self.account_endpoint}{investment_account.id}/")
         self.assertEqual(detail_resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(detail_resp.data["balance"], "38.29")
+        self.assertEqual(detail_resp.data["balance"], "24.00")
 
     def test_delete_normal_account_archives_and_keeps_transactions(self):
         tx_resp = self.client.post(

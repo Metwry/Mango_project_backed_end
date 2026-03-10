@@ -131,6 +131,13 @@ def _warm_quote_snapshot_for_instrument(instrument: Instrument) -> None:
         return
 
 
+def _sync_investment_account_or_raise(*, user) -> None:
+    try:
+        sync_investment_account_for_user(user=user)
+    except ValueError as exc:
+        raise ConflictError(str(exc))
+
+
 def execute_buy(*, user, instrument_id: int, quantity: Decimal, price: Decimal, cash_account_id: int, trade_at=None) -> dict:
     trade_at = trade_at or timezone.now()
     with transaction.atomic():
@@ -174,7 +181,7 @@ def execute_buy(*, user, instrument_id: int, quantity: Decimal, price: Decimal, 
             source=SOURCE_POSITION,
             enabled=True,
         )
-        sync_investment_account_for_user(user=user)
+        _sync_investment_account_or_raise(user=user)
         if getattr(settings, "INVESTMENT_QUOTE_WARMUP_ENABLED", True):
             transaction.on_commit(lambda i=instrument: _warm_quote_snapshot_for_instrument(i))
 
@@ -265,7 +272,7 @@ def execute_sell(*, user, instrument_id: int, quantity: Decimal, price: Decimal,
             position.save(update_fields=["quantity", "cost_total", "avg_cost", "realized_pnl_total", "updated_at"])
             position_snapshot = position
 
-        sync_investment_account_for_user(user=user)
+        _sync_investment_account_or_raise(user=user)
 
         record = InvestmentRecord.objects.create(
             user=user,
@@ -309,7 +316,7 @@ def delete_zero_position(*, user, instrument_id: int) -> dict:
             source=SOURCE_POSITION,
             enabled=False,
         )
-        sync_investment_account_for_user(user=user)
+        _sync_investment_account_or_raise(user=user)
 
     return {
         "deleted": True,
