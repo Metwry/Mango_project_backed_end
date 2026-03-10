@@ -52,7 +52,6 @@ class AccountViewSet(viewsets.ModelViewSet):
             return Response(conflict_payload, status=status.HTTP_409_CONFLICT)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-
 class TransactionFilter(filters.FilterSet):
     account_id = filters.NumberFilter(field_name="account")
     account_name = filters.CharFilter(field_name="account__name", lookup_expr="icontains")

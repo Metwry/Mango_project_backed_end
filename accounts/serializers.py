@@ -30,10 +30,19 @@ class AccountSerializer(serializers.ModelSerializer):
                 AccountSnapshot.objects
                 .filter(account_id=account_id)
                 .order_by("-snapshot_time", "-id")
-                .values("balance_native")
+                .values("balance_native", "account_currency")
                 .first()
             )
         return cache[account_id]
+
+    @staticmethod
+    def _should_use_snapshot_balance(instance: Accounts, latest: dict | None) -> bool:
+        if instance.type != Accounts.AccountType.INVESTMENT or not latest:
+            return False
+        if latest.get("balance_native") is None:
+            return False
+        snapshot_currency = str(latest.get("account_currency") or "").strip().upper()
+        return snapshot_currency == str(instance.currency or "").strip().upper()
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -69,7 +78,7 @@ class AccountSerializer(serializers.ModelSerializer):
             return payload
 
         latest = self._latest_snapshot_payload(instance.id)
-        if latest and latest.get("balance_native") is not None:
+        if self._should_use_snapshot_balance(instance, latest):
             payload["balance"] = str(latest["balance_native"])
         return payload
 

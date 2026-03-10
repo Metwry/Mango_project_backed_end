@@ -947,6 +947,61 @@ class AccountsBasicApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["balance"], "88.888888")
 
+    def test_investment_account_currency_change_response_ignores_stale_snapshot_of_old_currency(self):
+        investment_account = Accounts.objects.create(
+            user=self.user,
+            name="投资账户",
+            type=Accounts.AccountType.INVESTMENT,
+            currency="CNY",
+            balance=Decimal("268.00"),
+            status=Accounts.Status.ACTIVE,
+        )
+        instrument = Instrument.objects.create(
+            symbol="AAPL.US",
+            short_code="AAPL",
+            name="Apple Inc.",
+            asset_class=Instrument.AssetClass.STOCK,
+            market=Instrument.Market.US,
+            exchange="NASDAQ",
+            base_currency="USD",
+            is_active=True,
+        )
+        Position.objects.create(
+            user=self.user,
+            instrument=instrument,
+            quantity=Decimal("1.000000"),
+            avg_cost=Decimal("10.000000"),
+            cost_total=Decimal("10.000000"),
+            realized_pnl_total=Decimal("0"),
+        )
+        AccountSnapshot.objects.create(
+            account=investment_account,
+            snapshot_level=SnapshotLevel.M15,
+            snapshot_time="2026-03-04T00:00:00Z",
+            account_currency="CNY",
+            balance_native=Decimal("268.000000"),
+            balance_usd=Decimal("38.285714"),
+            data_status=SnapshotDataStatus.OK,
+        )
+
+        resp = self.client.patch(
+            f"{self.account_endpoint}{investment_account.id}/",
+            {"currency": "USD"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["currency"], "USD")
+        self.assertEqual(resp.data["balance"], "38.29")
+
+        investment_account.refresh_from_db()
+        self.assertEqual(investment_account.currency, "USD")
+        self.assertEqual(investment_account.balance, Decimal("38.29"))
+
+        detail_resp = self.client.get(f"{self.account_endpoint}{investment_account.id}/")
+        self.assertEqual(detail_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_resp.data["balance"], "38.29")
+
     def test_delete_normal_account_archives_and_keeps_transactions(self):
         tx_resp = self.client.post(
             self.tx_endpoint,
