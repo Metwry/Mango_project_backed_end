@@ -2,8 +2,8 @@ from django.db import transaction as db_transaction
 from rest_framework.exceptions import ValidationError
 
 from accounts.models import Accounts
+from investment.services.account_service import sync_investment_account_for_user
 from investment.models import Position
-from investment.services import sync_investment_account_for_user
 from shared.utils import normalize_code
 
 from .currency_service import convert_amount_or_raise
@@ -31,6 +31,21 @@ def update_account_from_serializer(*, serializer):
     previous_currency = instance.currency
     next_currency = normalize_code(serializer.validated_data.get("currency", previous_currency)) or previous_currency
 
+    if instance.type == Accounts.AccountType.INVESTMENT:
+        with db_transaction.atomic():
+            if next_currency == previous_currency:
+                return serializer.save()
+            try:
+                synced = sync_investment_account_for_user(
+                    user=instance.user,
+                    target_currency=next_currency,
+                )
+            except ValueError as exc:
+                raise ValidationError({"currency": str(exc)})
+            if synced is None:
+                raise ValidationError({"currency": "投资账户不存在可估值持仓，无法修改币种。"})
+            return synced
+
     extra_save_kwargs = {}
     if next_currency != previous_currency:
         try:
@@ -44,15 +59,7 @@ def update_account_from_serializer(*, serializer):
         extra_save_kwargs = {"currency": next_currency, "balance": converted_balance}
 
     with db_transaction.atomic():
-        updated = serializer.save(**extra_save_kwargs)
-        if updated.type == Accounts.AccountType.INVESTMENT and updated.currency != previous_currency:
-            synced = sync_investment_account_for_user(
-                user=updated.user,
-                target_currency=updated.currency,
-            )
-            if synced is not None:
-                updated = synced
-    return updated
+        return serializer.save(**extra_save_kwargs)
 
 
 def archive_account(*, account: Accounts, user) -> dict | None:

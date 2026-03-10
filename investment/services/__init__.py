@@ -8,6 +8,7 @@ from .trade_service import (
     trim_decimal_str,
 )
 from .query_service import build_position_list_queryset, query_investment_history
+from .valuation_service import InvestmentAccountValuation, calculate_investment_account_valuation
 
 __all__ = [
     "INVESTMENT_ACCOUNT_NAME",
@@ -20,5 +21,7 @@ __all__ = [
     "trim_decimal_str",
     "build_position_list_queryset",
     "query_investment_history",
+    "InvestmentAccountValuation",
+    "calculate_investment_account_valuation",
 ]
 

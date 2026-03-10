@@ -4,7 +4,6 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
 from .models import Accounts, Transaction, Transfer
-from snapshot.models import AccountSnapshot
 
 
 class AccountSerializer(serializers.ModelSerializer):
@@ -22,27 +21,6 @@ class AccountSerializer(serializers.ModelSerializer):
                 message="您已存在该币种下的同名账户",
             )
         ]
-
-    def _latest_snapshot_payload(self, account_id: int):
-        cache = self.context.setdefault("_investment_snapshot_cache", {})
-        if account_id not in cache:
-            cache[account_id] = (
-                AccountSnapshot.objects
-                .filter(account_id=account_id)
-                .order_by("-snapshot_time", "-id")
-                .values("balance_native", "account_currency")
-                .first()
-            )
-        return cache[account_id]
-
-    @staticmethod
-    def _should_use_snapshot_balance(instance: Accounts, latest: dict | None) -> bool:
-        if instance.type != Accounts.AccountType.INVESTMENT or not latest:
-            return False
-        if latest.get("balance_native") is None:
-            return False
-        snapshot_currency = str(latest.get("account_currency") or "").strip().upper()
-        return snapshot_currency == str(instance.currency or "").strip().upper()
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -71,16 +49,6 @@ class AccountSerializer(serializers.ModelSerializer):
             )
 
         return attrs
-
-    def to_representation(self, instance):
-        payload = super().to_representation(instance)
-        if instance.type != Accounts.AccountType.INVESTMENT:
-            return payload
-
-        latest = self._latest_snapshot_payload(instance.id)
-        if self._should_use_snapshot_balance(instance, latest):
-            payload["balance"] = str(latest["balance_native"])
-        return payload
 
 class TransactionSerializer(serializers.ModelSerializer):
     account_name = serializers.CharField(source="account.name", read_only=True)
