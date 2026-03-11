@@ -1,6 +1,14 @@
 # Mango Backend 维护手册
 
-更新时间：2026-03-10
+版本：`V1.0.0`
+
+更新时间：2026-03-11
+
+相关项目文档：
+
+- [README.md](README.md)
+- [README.zh-CN.md](README.zh-CN.md)
+- [README.en.md](README.en.md)
 
 ## 1. 当前部署基线
 

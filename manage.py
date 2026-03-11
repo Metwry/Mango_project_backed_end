@@ -3,7 +3,7 @@
 import os
 import sys
 
-# Version = 0.9.9.4
+# Version = 1.0.0
 def main():
     """Run administrative tasks."""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mango_project.settings")
