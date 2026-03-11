@@ -7,8 +7,6 @@
 相关项目文档：
 
 - [README.md](README.md)
-- [README.zh-CN.md](README.zh-CN.md)
-- [README.en.md](README.en.md)
 
 ## 1. 当前部署基线
 
