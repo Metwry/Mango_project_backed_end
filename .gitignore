@@ -19,3 +19,4 @@ logo_downloads/
 .DS_Store
 
 tmp_celery_logs/
+test/k6/
