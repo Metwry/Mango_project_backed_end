@@ -27,8 +27,12 @@ def _normalize_hk_logo_ticker(code: str) -> str | None:
         value = value[:-3]
     digits = re.sub(r"\D", "", value)
     if digits:
-        # logo.dev expects HK tickers without leading zeros, e.g. 01810 -> 1810.HK
-        return f"{int(digits)}.HK"
+        # HK equities are typically 4-digit codes on major data providers:
+        # 00700 -> 0700.HK, 01810 -> 1810.HK, 00005 -> 0005.HK.
+        normalized = digits.lstrip("0") or "0"
+        if len(normalized) <= 4:
+            normalized = normalized.zfill(4)
+        return f"{normalized}.HK"
     return f"{value}.HK"
 
 

@@ -589,6 +589,24 @@ class MarketLogoSyncCommandTests(TestCase):
         self.assertEqual(sh.logo_source, "logo.dev:ticker")
         self.assertEqual(sz.logo_source, "logo.dev:ticker")
 
+    @patch("market.management.commands.sync_logo_data.extract_logo_theme_color", return_value="#112233")
+    def test_sync_logo_data_hk_zero_pads_to_4_digits(self, _mock_extract):
+        hk = Instrument.objects.create(
+            symbol="00700.HK",
+            short_code="00700",
+            name="Tencent",
+            market=Instrument.Market.HK,
+            asset_class=Instrument.AssetClass.STOCK,
+            is_active=True,
+        )
+
+        call_command("sync_logo_data", "--markets", "hk", stdout=StringIO())
+
+        hk.refresh_from_db()
+
+        self.assertIn("/ticker/0700.HK", hk.logo_url)
+        self.assertEqual(hk.logo_source, "logo.dev:ticker")
+
 
 class MarketCoreIndexSyncCommandTests(TestCase):
     def test_sync_core_indices_creates_selected_market_indices(self):
