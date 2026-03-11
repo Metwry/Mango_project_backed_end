@@ -173,6 +173,11 @@ class MarketBasicApiTests(APITestCase):
         self.assertGreaterEqual(len(resp.data["results"]), 1)
         self.assertIn("instrument_id", resp.data["results"][0])
 
+    def test_market_search_blank_query_returns_empty_results(self):
+        resp = self.client.get("/api/user/markets/search/?q=   ")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data, {"results": []})
+
 
 @override_settings(
     CACHES={
@@ -212,6 +217,25 @@ class MarketComplexApiTests(APITestCase):
         sub = UserInstrumentSubscription.objects.get(user=self.user, instrument=self.instrument)
         self.assertTrue(sub.from_position)
         self.assertFalse(sub.from_watchlist)
+
+    @patch("market.services.quote_snapshot_service.pull_single_instrument_quote")
+    def test_watchlist_delete_accepts_market_and_short_code(self, mock_pull):
+        mock_pull.return_value = {
+            "short_code": "AAPL",
+            "name": "Apple Inc.",
+            "price": 200.0,
+        }
+        add_resp = self.client.post(self.watchlist_endpoint, {"symbol": "AAPL.US"}, format="json")
+        self.assertEqual(add_resp.status_code, status.HTTP_201_CREATED)
+
+        del_resp = self.client.delete(
+            self.watchlist_endpoint,
+            {"market": "us", "short_code": "aapl"},
+            format="json",
+        )
+        self.assertEqual(del_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(del_resp.data["deleted"], 1)
+        self.assertFalse(UserInstrumentSubscription.objects.filter(user=self.user, instrument=self.instrument).exists())
 
     @patch("market.services.quote_snapshot_service.pull_single_instrument_quote")
     def test_delete_to_orphan_then_add_uses_orphan_quote(self, mock_pull):

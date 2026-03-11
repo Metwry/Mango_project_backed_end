@@ -72,29 +72,31 @@ def send_password_reset_email_code(email: str) -> None:
     )
 
 
-def verify_register_email_code(email: str, code: str) -> None:
-    payload = cache.get(email_code_cache_key(email))
+def _verify_email_code(*, cache_key: str, code: str) -> None:
+    payload = cache.get(cache_key)
     if not isinstance(payload, dict):
         raise ValueError("验证码已过期或不存在")
 
     code_hash = payload.get("code_hash")
     if not isinstance(code_hash, str) or not check_password(code, code_hash):
         raise ValueError("验证码错误")
+
+
+def verify_register_email_code(email: str, code: str) -> None:
+    _verify_email_code(cache_key=email_code_cache_key(email), code=code)
 
 
 def verify_password_reset_email_code(email: str, code: str) -> None:
-    payload = cache.get(password_reset_code_cache_key(email))
-    if not isinstance(payload, dict):
-        raise ValueError("验证码已过期或不存在")
+    _verify_email_code(cache_key=password_reset_code_cache_key(email), code=code)
 
-    code_hash = payload.get("code_hash")
-    if not isinstance(code_hash, str) or not check_password(code, code_hash):
-        raise ValueError("验证码错误")
+
+def _clear_email_code(cache_key: str) -> None:
+    cache.delete(cache_key)
 
 
 def clear_register_email_code(email: str) -> None:
-    cache.delete(email_code_cache_key(email))
+    _clear_email_code(email_code_cache_key(email))
 
 
 def clear_password_reset_email_code(email: str) -> None:
-    cache.delete(password_reset_code_cache_key(email))
+    _clear_email_code(password_reset_code_cache_key(email))

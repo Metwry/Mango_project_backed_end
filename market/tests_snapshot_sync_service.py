@@ -24,7 +24,7 @@ class SnapshotSyncServiceTests(SimpleTestCase):
     @patch("market.services.snapshot_sync_service._need_refresh_fx_rates", return_value=False)
     @patch("market.services.snapshot_sync_service.pull_watchlist_quotes")
     @patch("market.services.snapshot_sync_service.resolve_due_markets")
-    @patch("market.services.snapshot_sync_service._subscription_meta_by_market")
+    @patch("market.services.snapshot_sync_service.global_subscription_meta_by_market")
     def test_force_init_pull_when_bootstrap_but_not_due(
         self,
         mock_sub_meta,
@@ -67,7 +67,7 @@ class SnapshotSyncServiceTests(SimpleTestCase):
     @patch("market.services.snapshot_sync_service._need_refresh_fx_rates", return_value=False)
     @patch("market.services.snapshot_sync_service.pull_watchlist_quotes")
     @patch("market.services.snapshot_sync_service.resolve_due_markets")
-    @patch("market.services.snapshot_sync_service._subscription_meta_by_market")
+    @patch("market.services.snapshot_sync_service.global_subscription_meta_by_market")
     def test_no_due_and_no_bootstrap_keeps_previous_pulled_at(
         self,
         mock_sub_meta,
@@ -121,4 +121,3 @@ class SnapshotSyncServiceTests(SimpleTestCase):
         market_payload = cache.get(f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}US")
         self.assertEqual(market_payload["pulled_at"], old_pulled_at)
         self.assertEqual(market_payload["updated_at"], payload["updated_at"])
-

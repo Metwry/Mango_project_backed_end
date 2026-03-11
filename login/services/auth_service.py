@@ -58,18 +58,14 @@ def build_login_payload(user) -> dict:
     }
 
 
-def create_user_by_email(*, email: str, password: str):
-    user_model = get_user_model()
-    return user_model.objects.create_user(
-        username=email,
-        email=email,
-        password=password,
-    )
-
-
 def register_user_by_email(*, email: str, password: str):
+    user_model = get_user_model()
     try:
-        user = create_user_by_email(email=email, password=password)
+        user = user_model.objects.create_user(
+            username=email,
+            email=email,
+            password=password,
+        )
     except IntegrityError as exc:
         raise ValueError("该邮箱已注册") from exc
     clear_register_email_code(email)

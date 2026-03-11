@@ -65,6 +65,20 @@ class LoginBasicApiTests(APITestCase):
         self.assertIn("refresh", resp.data)
         self.assertEqual(resp.data["user"]["email"], "login_basic@example.com")
 
+    def test_login_accepts_email_field(self):
+        get_user_model().objects.create_user(
+            username="login_email_field",
+            email="email_field@example.com",
+            password="test123456",
+        )
+        resp = self.client.post(
+            self.login_endpoint,
+            {"email": "email_field@example.com", "password": "test123456"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["user"]["email"], "email_field@example.com")
+
 
 @override_settings(
     CACHES={

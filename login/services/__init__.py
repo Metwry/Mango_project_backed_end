@@ -1,7 +1,6 @@
 from .auth_service import (
     authenticate_email_password,
     build_login_payload,
-    create_user_by_email,
     register_user_by_email,
     reset_user_password_by_email,
     update_username_for_user,
@@ -22,7 +21,6 @@ from .email_code_service import (
 __all__ = [
     "authenticate_email_password",
     "build_login_payload",
-    "create_user_by_email",
     "register_user_by_email",
     "reset_user_password_by_email",
     "update_username_for_user",

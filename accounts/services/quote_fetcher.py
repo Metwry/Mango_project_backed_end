@@ -237,11 +237,6 @@ def get_unique_instruments_from_subscriptions() -> List[Tuple[str, str, str, str
     return out
 
 
-def get_unique_instruments_from_watchlist() -> List[Tuple[str, str, str, str, Optional[str], Optional[str]]]:
-    # Backward-compatible alias: quote pulling now uses unified subscription set.
-    return get_unique_instruments_from_subscriptions()
-
-
 def pull_usd_exchange_rates(seed_rows: Optional[List[dict]] = None) -> Dict[str, float]:
     if _use_fake_provider():
         return dict(FAKE_USD_RATES)
