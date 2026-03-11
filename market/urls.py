@@ -10,10 +10,10 @@ from .views import (
 )
 
 urlpatterns = [
-    path("markets/", MarketsView.as_view(), name="user-markets"),
-    path("markets/indices/", MarketIndexSnapshotView.as_view(), name="user-market-indices"),
-    path("markets/fx-rates/", MarketFxRatesView.as_view(), name="user-market-fx-rates"),
-    path("markets/search/", MarketInstrumentSearchView.as_view(), name="user-market-search"),
-    path("markets/quotes/latest/", MarketLatestQuoteBatchView.as_view(), name="user-market-latest-quotes"),
-    path("markets/watchlist/", MarketWatchlistAddView.as_view(), name="user-market-watchlist-add"),
+    path("", MarketsView.as_view(), name="user-markets"),
+    path("indices/", MarketIndexSnapshotView.as_view(), name="user-market-indices"),
+    path("fx-rates/", MarketFxRatesView.as_view(), name="user-market-fx-rates"),
+    path("search/", MarketInstrumentSearchView.as_view(), name="user-market-search"),
+    path("quotes/latest/", MarketLatestQuoteBatchView.as_view(), name="user-market-latest-quotes"),
+    path("watchlist/", MarketWatchlistAddView.as_view(), name="user-market-watchlist-add"),
 ]
