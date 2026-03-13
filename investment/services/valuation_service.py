@@ -93,7 +93,7 @@ class InvestmentAccountValuation:
     quoted_position_count: int
     cost_fallback_position_count: int
 
-
+# 计算投资账户的余额
 def calculate_investment_account_valuation(*, positions: list[Position], target_currency: str) -> InvestmentAccountValuation:
     account_currency = normalize_code(target_currency) or "USD"
     usd_rates = load_cached_usd_rates()

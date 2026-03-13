@@ -8,7 +8,7 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from accounts.models import Accounts
+from accounts.models import Accounts, is_system_investment_account
 from investment.models import Position
 from market.services.fx_rate_service import get_fx_rates
 from shared.constants import market_currency
@@ -158,7 +158,7 @@ class Command(BaseCommand):
         investment_account_by_user = {
             account.user_id: account
             for account in accounts
-            if account.type == Accounts.AccountType.INVESTMENT
+            if is_system_investment_account(account=account)
         }
 
         positions = list(
@@ -275,7 +275,7 @@ class Command(BaseCommand):
                 for account in accounts:
                     ccy = str(account.currency or "USD").strip().upper() or "USD"
 
-                    if account.type == Accounts.AccountType.INVESTMENT:
+                    if is_system_investment_account(account=account):
                         total_usd = inv_total_usd.get(account.id, ZERO)
                         native, fx_rate = from_usd(total_usd, ccy, rates)
                         status = inv_status.get(account.id, SnapshotDataStatus.OK)

@@ -311,6 +311,23 @@ def sync_watchlist_snapshot() -> dict:
     except Exception:
         logger.exception("写入美元汇率到 Redis 失败")
 
+    try:
+        from investment.models import Position
+        from investment.services.account_service import sync_investment_accounts_for_users
+
+        active_position_user_ids = (
+            Position.objects
+            .filter(quantity__gt=0)
+            .values_list("user_id", flat=True)
+            .distinct()
+        )
+        sync_result = sync_investment_accounts_for_users(user_ids=active_position_user_ids)
+        failed_user_ids = sync_result.get("failed_user_ids") or []
+        if failed_user_ids:
+            logger.warning("投资账户余额同步部分失败 failed_user_ids=%s", failed_user_ids)
+    except Exception:
+        logger.exception("同步投资账户余额失败")
+
     if not quotes and previous_data:
         log_info(logger, "watchlist.snapshot.no_market_update", stale_markets=stale_markets)
 

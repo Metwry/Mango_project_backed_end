@@ -5,6 +5,18 @@ from django.db import models, transaction as db_transaction
 from django.db.models import Q
 from django.utils import timezone
 
+SYSTEM_INVESTMENT_ACCOUNT_NAME = "投资账户"
+
+# 判断是否是投资账户
+def is_system_investment_account(*, account=None, account_type=None, account_name=None) -> bool:
+    if account is not None:
+        account_type = getattr(account, "type", account_type)
+        account_name = getattr(account, "name", account_name)
+    return (
+        account_type == Accounts.AccountType.INVESTMENT
+        and str(account_name or "").strip() == SYSTEM_INVESTMENT_ACCOUNT_NAME
+    )
+
 
 class Currency(models.TextChoices):
     CNY = "CNY", "人民币"
@@ -48,11 +60,11 @@ class Accounts(models.Model):
     class Meta:
         db_table = "accounts"
         ordering = ["-updated_at"]
-        unique_together = [("user", "name", "currency")]
+        unique_together = [("user", "name","type", "currency")]
         constraints = [
             models.UniqueConstraint(
                 fields=["user"],
-                condition=Q(type="investment", name="投资账户"),
+                condition=Q(type="investment", name=SYSTEM_INVESTMENT_ACCOUNT_NAME),
                 name="uniq_user_investment_named_account",
             ),
         ]
