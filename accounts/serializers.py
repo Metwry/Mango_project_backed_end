@@ -3,7 +3,7 @@ from decimal import Decimal
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
-from .models import Accounts, Transaction, Transfer
+from .models import Accounts, Transaction, Transfer, is_system_investment_account
 
 
 class AccountSerializer(serializers.ModelSerializer):
@@ -17,8 +17,8 @@ class AccountSerializer(serializers.ModelSerializer):
         validators = [
             UniqueTogetherValidator(
                 queryset=Accounts.objects.all(),
-                fields=["user", "name", "currency"],
-                message="您已存在该币种下的同名账户",
+                fields=["user", "name", "type","currency"],
+                message="您已存在同类型同币种的同名账户",
             )
         ]
 
@@ -29,13 +29,12 @@ class AccountSerializer(serializers.ModelSerializer):
         if instance is None:
             account_type = attrs.get("type")
             account_name = str(attrs.get("name") or "").strip()
-            if account_type == Accounts.AccountType.INVESTMENT and account_name == "投资账户":
+            if is_system_investment_account(account_type=account_type, account_name=account_name):
                 raise serializers.ValidationError({"message": "投资账户由系统自动维护，不能手动创建。"})
-            if account_type == Accounts.AccountType.INVESTMENT:
-                raise serializers.ValidationError({"message": "投资账户由系统自动维护，不能手动创建。"})
+
             return attrs
 
-        if instance.type != Accounts.AccountType.INVESTMENT:
+        if not is_system_investment_account(account=instance):
             return attrs
 
         blocked_fields = []
@@ -97,8 +96,8 @@ class TransactionSerializer(serializers.ModelSerializer):
         req_user = self.context["request"].user
         if value.user_id != req_user.id:
             raise serializers.ValidationError("您无权使用该账户进行记账。")
-        if value.type == Accounts.AccountType.INVESTMENT:
-            raise serializers.ValidationError("投资账户不允许手工记账，请通过持仓买卖自动计算。")
+        if is_system_investment_account(account=value):
+            raise serializers.ValidationError("投资账户不允许手工记账，通过持仓买卖自动计算。")
         return value
 
     def validate(self, attrs):

@@ -365,6 +365,91 @@ class AccountsBasicApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(resp.data.get("message"), "投资账户由系统自动维护，不能手动创建。")
 
+    def test_create_account_allows_same_name_and_currency_when_type_differs(self):
+        resp = self.client.post(
+            self.account_endpoint,
+            {
+                "name": "Cash CNY",
+                "type": Accounts.AccountType.BANK,
+                "currency": "CNY",
+                "balance": "50.00",
+                "status": Accounts.Status.ACTIVE,
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            Accounts.objects.filter(user=self.user, name="Cash CNY", currency="CNY").count(),
+            2,
+        )
+
+    def test_create_account_rejects_duplicate_name_type_and_currency(self):
+        resp = self.client.post(
+            self.account_endpoint,
+            {
+                "name": "Cash CNY",
+                "type": Accounts.AccountType.CASH,
+                "currency": "CNY",
+                "balance": "50.00",
+                "status": Accounts.Status.ACTIVE,
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            resp.data["non_field_errors"][0],
+            "您已存在同类型同币种的同名账户",
+        )
+
+    def test_update_account_rejects_duplicate_name_type_and_currency(self):
+        bank_account = Accounts.objects.create(
+            user=self.user,
+            name="Cash CNY",
+            type=Accounts.AccountType.BANK,
+            currency="CNY",
+            balance=Decimal("100.00"),
+            status=Accounts.Status.ACTIVE,
+        )
+
+        resp = self.client.patch(
+            f"{self.account_endpoint}{bank_account.id}/",
+            {"type": Accounts.AccountType.CASH},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            resp.data["non_field_errors"][0],
+            "您已存在同类型同币种的同名账户",
+        )
+
+    def test_non_system_investment_type_account_allows_manual_transaction(self):
+        create_resp = self.client.post(
+            self.account_endpoint,
+            {
+                "name": "自定义投资",
+                "type": Accounts.AccountType.INVESTMENT,
+                "currency": "USD",
+                "balance": "100.00",
+            },
+            format="json",
+        )
+        self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+
+        tx_resp = self.client.post(
+            self.tx_endpoint,
+            {
+                "counterparty": "测试记账",
+                "amount": "-10.00",
+                "category_name": "测试",
+                "account": create_resp.data["id"],
+            },
+            format="json",
+        )
+        self.assertEqual(tx_resp.status_code, status.HTTP_201_CREATED)
+
     def test_transaction_create_and_reverse(self):
         create_resp = self.client.post(
             self.tx_endpoint,
@@ -1049,7 +1134,7 @@ class AccountsBasicApiTests(APITestCase):
         self.assertEqual(len(list_with_archived_resp.data), 1)
         self.assertEqual(list_with_archived_resp.data[0]["status"], Accounts.Status.ARCHIVED)
 
-    def test_delete_investment_account_blocked_when_has_positions(self):
+    def test_delete_investment_account_is_always_blocked(self):
         investment_account = Accounts.objects.create(
             user=self.user,
             name="投资账户",
@@ -1078,11 +1163,12 @@ class AccountsBasicApiTests(APITestCase):
         delete_resp = self.client.delete(f"{self.account_endpoint}{investment_account.id}/")
         self.assertEqual(delete_resp.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(delete_resp.data["code"], "investment_account_delete_blocked")
+        self.assertEqual(delete_resp.data["message"], "系统投资账户由系统维护，不能删除。")
 
         investment_account.refresh_from_db()
         self.assertEqual(investment_account.status, Accounts.Status.ACTIVE)
 
-    def test_delete_investment_account_without_positions_archives(self):
+    def test_delete_investment_account_without_positions_is_blocked(self):
         investment_account = Accounts.objects.create(
             user=self.user,
             name="投资账户",
@@ -1093,10 +1179,37 @@ class AccountsBasicApiTests(APITestCase):
         )
 
         delete_resp = self.client.delete(f"{self.account_endpoint}{investment_account.id}/")
-        self.assertEqual(delete_resp.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(delete_resp.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(delete_resp.data["code"], "investment_account_delete_blocked")
+        self.assertEqual(delete_resp.data["message"], "系统投资账户由系统维护，不能删除。")
 
         investment_account.refresh_from_db()
-        self.assertEqual(investment_account.status, Accounts.Status.ARCHIVED)
+        self.assertEqual(investment_account.status, Accounts.Status.ACTIVE)
+
+    def test_investment_account_currency_change_without_positions_keeps_zero_balance(self):
+        investment_account = Accounts.objects.create(
+            user=self.user,
+            name="投资账户",
+            type=Accounts.AccountType.INVESTMENT,
+            currency="CNY",
+            balance=Decimal("0.00"),
+            status=Accounts.Status.ACTIVE,
+        )
+
+        resp = self.client.patch(
+            f"{self.account_endpoint}{investment_account.id}/",
+            {"currency": "USD"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["currency"], "USD")
+        self.assertEqual(resp.data["balance"], "0.00")
+
+        investment_account.refresh_from_db()
+        self.assertEqual(investment_account.status, Accounts.Status.ACTIVE)
+        self.assertEqual(investment_account.currency, "USD")
+        self.assertEqual(investment_account.balance, Decimal("0.00"))
 
 
 class AccountsComplexApiTests(TransactionTestCase):

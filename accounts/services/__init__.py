@@ -7,7 +7,6 @@ from .quote_fetcher import (
 )
 from .account_service import (
     archive_account,
-    create_account_for_user,
     get_user_accounts_queryset,
     should_include_archived,
     update_account_from_serializer,
@@ -28,7 +27,6 @@ __all__ = [
     "pull_watchlist_quotes",
     "should_include_archived",
     "get_user_accounts_queryset",
-    "create_account_for_user",
     "update_account_from_serializer",
     "archive_account",
     "build_transaction_queryset",

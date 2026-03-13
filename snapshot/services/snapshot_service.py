@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from accounts.models import Accounts
+from accounts.models import Accounts, is_system_investment_account
 from investment.models import Position
 from market.services.fx_rate_service import get_fx_rates
 from market.services.quote_snapshot_service import build_quote_index, get_snapshot_payload
@@ -144,7 +144,7 @@ def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> 
     investment_accounts_by_user = {
         account.user_id: account
         for account in active_accounts
-        if account.type == Accounts.AccountType.INVESTMENT
+        if is_system_investment_account(account=account)
     }
 
     positions = list(
@@ -229,7 +229,7 @@ def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> 
         for account in active_accounts:
             account_currency = normalize_code(account.currency) or "USD"
 
-            if account.type == Accounts.AccountType.INVESTMENT:
+            if is_system_investment_account(account=account):
                 agg = investment_aggregates.get(account.id, _InvestmentAggregate())
                 balance_usd = _q_amount(agg.total_usd)
                 native_value, fx_rate = _usd_to_native(balance_usd, account_currency, usd_rates)

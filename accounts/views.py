@@ -10,7 +10,6 @@ from .pagination import TransactionPagination
 from .services import (
     archive_account,
     build_transaction_queryset,
-    create_account_for_user,
     create_transfer,
     create_transaction_for_user,
     delete_single_transaction,
@@ -34,13 +33,10 @@ from .serializers import (
 class AccountViewSet(viewsets.ModelViewSet):
     serializer_class = AccountSerializer
     permission_classes = [IsAuthenticated]
-
+    # ed
     def get_queryset(self):
         include_archived = should_include_archived(self.request.query_params.get("include_archived"))
         return get_user_accounts_queryset(user=self.request.user, include_archived=include_archived)
-
-    def perform_create(self, serializer):
-        create_account_for_user(serializer=serializer, user=self.request.user)
 
     def perform_update(self, serializer):
         serializer.instance = update_account_from_serializer(serializer=serializer)

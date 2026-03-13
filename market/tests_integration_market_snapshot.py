@@ -43,6 +43,71 @@ class MarketSnapshotIntegrationTests(TestCase):
     @patch("market.services.snapshot_sync_service._need_refresh_fx_rates", return_value=False)
     @patch("market.services.snapshot_sync_service.pull_watchlist_quotes")
     @patch("market.services.snapshot_sync_service.resolve_due_markets")
+    def test_sync_watchlist_snapshot_revalues_investment_account_balance(
+        self,
+        mock_resolve_due,
+        mock_pull_quotes,
+        _mock_need_refresh_fx,
+    ):
+        investment_account = Accounts.objects.create(
+            user=self.user,
+            name="投资账户",
+            type=Accounts.AccountType.INVESTMENT,
+            currency=Currency.USD,
+            status=Accounts.Status.ACTIVE,
+            balance=Decimal("0"),
+        )
+        Position.objects.create(
+            user=self.user,
+            instrument=self.instrument,
+            quantity=Decimal("2"),
+            avg_cost=Decimal("90"),
+            cost_total=Decimal("180"),
+            realized_pnl_total=Decimal("0"),
+        )
+        UserInstrumentSubscription.objects.create(
+            user=self.user,
+            instrument=self.instrument,
+            from_position=True,
+            from_watchlist=False,
+        )
+        cache.set(
+            USD_EXCHANGE_RATES_KEY,
+            {
+                "base": "USD",
+                "updated_at": "2026-03-04T00:00:00+00:00",
+                "rates": {"USD": 1.0, "CNY": 7.0},
+            },
+            timeout=None,
+        )
+
+        mock_resolve_due.return_value = (
+            {"US"},
+            {"US": GuardDecision(market="US", should_pull=True, reason="due", session="regular")},
+        )
+        mock_pull_quotes.return_value = {
+            "US": [
+                {
+                    "short_code": "AAPL",
+                    "name": "Apple Inc.",
+                    "price": 100.0,
+                    "prev_close": 99.0,
+                    "day_high": 101.0,
+                    "day_low": 98.0,
+                    "pct": 1.0,
+                    "volume": 1.23,
+                }
+            ]
+        }
+
+        sync_watchlist_snapshot()
+
+        investment_account.refresh_from_db()
+        self.assertEqual(investment_account.balance, Decimal("200.00"))
+
+    @patch("market.services.snapshot_sync_service._need_refresh_fx_rates", return_value=False)
+    @patch("market.services.snapshot_sync_service.pull_watchlist_quotes")
+    @patch("market.services.snapshot_sync_service.resolve_due_markets")
     def test_sync_then_capture_m15_writes_position_and_account_snapshots(
         self,
         mock_resolve_due,
@@ -210,4 +275,3 @@ class MarketSnapshotIntegrationTests(TestCase):
         self.assertEqual(acc.balance_native, Decimal("700.000000"))
         self.assertEqual(acc.balance_usd, Decimal("100.000000"))
         self.assertEqual(acc.fx_rate_to_usd, Decimal("7.0000000000"))
-

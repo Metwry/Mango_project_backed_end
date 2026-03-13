@@ -1,37 +1,33 @@
 from django.db import transaction as db_transaction
 from rest_framework.exceptions import ValidationError
 
-from accounts.models import Accounts
+from accounts.models import Accounts, is_system_investment_account
 from investment.services.account_service import sync_investment_account_for_user
-from investment.models import Position
 from shared.utils import normalize_code
 
 from .currency_service import convert_amount_or_raise
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 
-
+# 判断归档字段的值
 def should_include_archived(raw_value) -> bool:
     return str(raw_value or "").strip().lower() in TRUE_VALUES
 
-
+# 返回账户信息
 def get_user_accounts_queryset(*, user, include_archived: bool):
     queryset = Accounts.objects.filter(user=user).order_by("-balance")
     if not include_archived:
         queryset = queryset.exclude(status=Accounts.Status.ARCHIVED)
     return queryset
 
-
-def create_account_for_user(*, serializer, user):
-    return serializer.save(user=user)
-
-
+# 通过userid，参数，修改账户
 def update_account_from_serializer(*, serializer):
     instance: Accounts = serializer.instance
     previous_currency = instance.currency
-    next_currency = normalize_code(serializer.validated_data.get("currency", previous_currency)) or previous_currency
+    next_currency = normalize_code(serializer.validated_data.get("currency", previous_currency))
 
-    if instance.type == Accounts.AccountType.INVESTMENT:
+    # 处理投资账户的数据更新
+    if is_system_investment_account(account=instance):
         with db_transaction.atomic():
             if next_currency == previous_currency:
                 return serializer.save()
@@ -43,9 +39,10 @@ def update_account_from_serializer(*, serializer):
             except ValueError as exc:
                 raise ValidationError({"currency": str(exc)})
             if synced is None:
-                raise ValidationError({"currency": "投资账户不存在可估值持仓，无法修改币种。"})
+                raise ValidationError({"currency": "系统投资账户同步失败。"})
             return synced
 
+    # 处理常规账户的数据更新
     extra_save_kwargs = {}
     if next_currency != previous_currency:
         try:
@@ -61,15 +58,13 @@ def update_account_from_serializer(*, serializer):
     with db_transaction.atomic():
         return serializer.save(**extra_save_kwargs)
 
-
+# 归档投资账户
 def archive_account(*, account: Accounts, user) -> dict | None:
-    if account.type == Accounts.AccountType.INVESTMENT:
-        has_positions = Position.objects.filter(user=user, quantity__gt=0).exists()
-        if has_positions:
-            return {
-                "code": "investment_account_delete_blocked",
-                "message": "投资账户存在持仓，无法删除，请先卖出全部持仓。",
-            }
+    if is_system_investment_account(account=account):
+        return {
+            "code": "investment_account_delete_blocked",
+            "message": "系统投资账户由系统维护，不能删除。",
+        }
 
     if account.status != Accounts.Status.ARCHIVED:
         account.status = Accounts.Status.ARCHIVED

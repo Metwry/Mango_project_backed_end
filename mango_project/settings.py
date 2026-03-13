@@ -92,7 +92,7 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'rest_framework_simplejwt',
-
+    "rest_framework_simplejwt.token_blacklist",
 
     'login',
     'accounts',
@@ -116,6 +116,7 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=300),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
+    "BLACKLIST_AFTER_ROTATION": False,
 }
 
 # 中间件链配置

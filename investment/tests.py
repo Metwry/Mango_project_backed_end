@@ -164,7 +164,7 @@ class InvestmentBasicApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_409_CONFLICT)
         self.assertIn("指数暂不支持交易", str(resp.data))
 
-    def test_sell_all_deletes_position_and_archives_investment_account(self):
+    def test_sell_all_deletes_position_and_keeps_investment_account_active(self):
         self.client.post(
             self.buy_endpoint,
             {
@@ -193,9 +193,10 @@ class InvestmentBasicApiTests(APITestCase):
             type=Accounts.AccountType.INVESTMENT,
             name=INVESTMENT_ACCOUNT_NAME,
         )
-        self.assertEqual(investment_account.status, Accounts.Status.ARCHIVED)
+        self.assertEqual(investment_account.status, Accounts.Status.ACTIVE)
+        self.assertEqual(investment_account.balance, Decimal("0.00"))
 
-    def test_buy_after_full_sell_reuses_archived_investment_account(self):
+    def test_buy_after_full_sell_reuses_same_investment_account(self):
         first_buy_resp = self.client.post(
             self.buy_endpoint,
             {
@@ -207,12 +208,12 @@ class InvestmentBasicApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(first_buy_resp.status_code, status.HTTP_201_CREATED)
-        archived_candidate = Accounts.objects.get(
+        investment_account = Accounts.objects.get(
             user=self.user,
             type=Accounts.AccountType.INVESTMENT,
             name=INVESTMENT_ACCOUNT_NAME,
         )
-        original_account_id = archived_candidate.id
+        original_account_id = investment_account.id
 
         sell_resp = self.client.post(
             self.sell_endpoint,
@@ -225,8 +226,9 @@ class InvestmentBasicApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(sell_resp.status_code, status.HTTP_201_CREATED)
-        archived_candidate.refresh_from_db()
-        self.assertEqual(archived_candidate.status, Accounts.Status.ARCHIVED)
+        investment_account.refresh_from_db()
+        self.assertEqual(investment_account.status, Accounts.Status.ACTIVE)
+        self.assertEqual(investment_account.balance, Decimal("0.00"))
 
         second_buy_resp = self.client.post(
             self.buy_endpoint,
@@ -542,7 +544,8 @@ class InvestmentConcurrencyApiTests(TransactionTestCase):
             type=Accounts.AccountType.INVESTMENT,
             name=INVESTMENT_ACCOUNT_NAME,
         )
-        self.assertEqual(investment_account.status, Accounts.Status.ARCHIVED)
+        self.assertEqual(investment_account.status, Accounts.Status.ACTIVE)
+        self.assertEqual(investment_account.balance, Decimal("0.00"))
         self.assertEqual(InvestmentRecord.objects.filter(side=InvestmentRecord.Side.SELL).count(), 1)
         self.assertEqual(Transaction.objects.count(), 2)
         self.assertFalse(UserInstrumentSubscription.objects.filter(user=self.user, instrument=self.instrument).exists())

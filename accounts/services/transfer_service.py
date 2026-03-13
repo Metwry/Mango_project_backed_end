@@ -5,7 +5,7 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, ValidationError
 
-from accounts.models import Accounts, Transaction, Transfer
+from accounts.models import Accounts, Transaction, Transfer, is_system_investment_account
 
 TRANSFER_CATEGORY = "转账"
 TRANSFER_OUT_REMARK = "转出"
@@ -23,7 +23,7 @@ def _lock_account_for_transfer(*, user, account_id: int, field_name: str) -> Acc
         raise NotFound("账户不存在或无权限。")
     if account.status != Accounts.Status.ACTIVE:
         raise ValidationError({field_name: "账户未启用，不能转账。"})
-    if account.type == Accounts.AccountType.INVESTMENT:
+    if is_system_investment_account(account=account):
         raise ValidationError({field_name: "投资账户不支持转账。"})
     return account
 
