@@ -6,6 +6,7 @@ from market.models import UserInstrumentSubscription
 from shared.utils import normalize_code, resolve_short_code
 
 
+# 返回全局订阅标的按市场聚合后的元数据。
 def global_subscription_meta_by_market() -> dict[str, dict[str, dict]]:
     grouped: dict[str, dict[str, dict]] = defaultdict(dict)
     rows = (
@@ -36,6 +37,7 @@ def global_subscription_meta_by_market() -> dict[str, dict[str, dict]]:
     return dict(grouped)
 
 
+# 返回当前用户自选订阅按市场分组的短代码集合。
 def user_watchlist_codes_by_market(user) -> dict[str, set[str]]:
     if not user or not getattr(user, "is_authenticated", False):
         return {}

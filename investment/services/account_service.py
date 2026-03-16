@@ -12,14 +12,14 @@ from .valuation_service import calculate_investment_account_valuation
 INVESTMENT_ACCOUNT_NAME = SYSTEM_INVESTMENT_ACCOUNT_NAME
 POSITION_ZERO = Decimal("0")
 
-#拿到userid
+# 解析用户对象或显式 user_id，统一得到整数用户 ID。
 def _resolve_user_id(*, user=None, user_id: int | None = None) -> int:
     resolved = user_id if user_id is not None else getattr(user, "id", None)
     if resolved is None:
         raise ValueError("user_id is required")
     return int(resolved)
 
-# 更新投资账户的数据
+# 同步单个用户的系统投资账户余额、币种和状态。
 def sync_investment_account_for_user(
     *,
     user=None,
@@ -130,6 +130,7 @@ def sync_investment_account_for_user(
         return account
 
 
+# 批量同步多个用户的系统投资账户，并汇总执行结果。
 def sync_investment_accounts_for_users(*, user_ids: Iterable[int]) -> dict[str, object]:
     normalized_ids: list[int] = []
     seen: set[int] = set()

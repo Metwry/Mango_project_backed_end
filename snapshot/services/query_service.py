@@ -18,6 +18,7 @@ INTERVAL_UNIT = {
 }
 
 
+# 在没有任何快照点时构造空序列返回结构。
 def _build_empty_series_payload(*, params: dict, level: str, axis_start, axis_end):
     return {
         "meta": {
@@ -34,6 +35,7 @@ def _build_empty_series_payload(*, params: dict, level: str, axis_start, axis_en
     }
 
 
+# 构造快照查询结果的元信息结构。
 def _build_meta(*, params: dict, level: str, axis_start, axis_end, point_count: int):
     return {
         "level": level,
@@ -47,6 +49,7 @@ def _build_meta(*, params: dict, level: str, axis_start, axis_end, point_count: 
     }
 
 
+# 查询账户维度的快照时间序列数据。
 def build_account_snapshot_query_result(*, user, params: dict) -> dict:
     level = params["level"]
     buckets, axis_start, axis_end = build_bucket_axis(params["start_time"], params["end_time"], level)
@@ -115,6 +118,7 @@ def build_account_snapshot_query_result(*, user, params: dict) -> dict:
     }
 
 
+# 查询持仓维度的快照时间序列数据。
 def build_position_snapshot_query_result(*, user, params: dict) -> dict:
     level = params["level"]
     buckets, axis_start, axis_end = build_bucket_axis(params["start_time"], params["end_time"], level)

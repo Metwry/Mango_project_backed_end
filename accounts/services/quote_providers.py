@@ -53,6 +53,7 @@ class QuoteOut:
     volume: Optional[float]
 
 
+# 去掉统一代码中的市场后缀，得到短代码。
 def _strip_symbol_suffix(symbol: str) -> str:
     s = symbol.strip().upper()
     if "." not in s: return s
@@ -60,6 +61,7 @@ def _strip_symbol_suffix(symbol: str) -> str:
     return code if suffix.isalpha() else s
 
 
+# 安全地将任意值转换为浮点数。
 def _safe_float(x: Any) -> Optional[float]:
     try:
         return None if x is None or str(x).strip() in ("", "nan", "NaN") else float(x)
@@ -67,12 +69,14 @@ def _safe_float(x: Any) -> Optional[float]:
         return None
 
 
+# 将成交额转换为以亿为单位的展示数值。
 def _to_billion_amount(amount: Optional[float]) -> Optional[float]:
     if amount is None or amount <= 0:
         return None
     return round(amount / 100000000.0, 2)
 
 
+# 获取币安当前支持的交易对列表，并使用内存缓存降低请求频率。
 def _get_binance_supported_symbols(*, timeout: float = 10.0) -> set[str] | None:
     global _BINANCE_SUPPORTED_SYMBOLS_CACHE
 
@@ -105,10 +109,12 @@ def _get_binance_supported_symbols(*, timeout: float = 10.0) -> set[str] | None:
     return supported
 
 
+# 判断本地时间是否为工作日。
 def _is_weekday(dt_local: datetime) -> bool:
     return dt_local.weekday() < 5
 
 
+# 根据市场和当前 UTC 时间判断是否处于应抓取行情的时段。
 def should_fetch_market(market: str, now_utc: Optional[datetime] = None) -> bool:
     now_utc = now_utc or datetime.now(timezone.utc)
     if market == MARKET_CRYPTO: return True
@@ -134,6 +140,7 @@ def should_fetch_market(market: str, now_utc: Optional[datetime] = None) -> bool
 
 # ==================== 股票市场 (新浪直连) ====================
 
+# 将统一股票代码转换为新浪接口所需代码格式。
 def _to_sina_symbol(market: str, symbol: str) -> str:
     s = symbol.strip().upper()
     if market == MARKET_CN:
@@ -155,6 +162,7 @@ def _to_sina_symbol(market: str, symbol: str) -> str:
     return ""
 
 
+# 通过新浪接口批量拉取股票市场行情。
 def fetch_stocks_sina(market: str, items: List[Tuple[str, str, str]]) -> List[QuoteOut]:
     results = []
     if not items: return results
@@ -235,6 +243,7 @@ def fetch_stocks_sina(market: str, items: List[Tuple[str, str, str]]) -> List[Qu
 
 # ==================== 加密货币 (币安) ====================
 
+# 通过币安接口批量拉取加密货币行情。
 def fetch_crypto_quotes_binance(items: List[Tuple[str, str, str]]) -> List[QuoteOut]:
     results = []
     if not items: return results
@@ -335,6 +344,7 @@ def fetch_crypto_quotes_binance(items: List[Tuple[str, str, str]]) -> List[Quote
 
 # ==================== 外汇主从容灾架构 (新浪 + yfinance) ====================
 
+# 将统一外汇代码转换为新浪外汇接口代码。
 def _to_sina_fx_symbol(symbol: str) -> str:
     s = symbol.strip().upper()
     if s.endswith(".FX"):
@@ -345,6 +355,7 @@ def _to_sina_fx_symbol(symbol: str) -> str:
     return f"fx_s{m.group(1).lower()}{m.group(2).lower()}"
 
 
+# 通过新浪接口批量拉取外汇行情。
 def fetch_fx_quotes_sina(items: List[Tuple[str, str, str]]) -> List[QuoteOut]:
     """主接口：新浪外汇"""
     results = []
@@ -410,6 +421,7 @@ def fetch_fx_quotes_sina(items: List[Tuple[str, str, str]]) -> List[QuoteOut]:
     return results
 
 
+# 使用 yfinance 作为新浪外汇失败时的备用行情源。
 def fetch_fx_quotes_yfinance(items: List[Tuple[str, str, str]]) -> List[QuoteOut]:
     """备用接口：yfinance"""
     results = []
@@ -472,6 +484,7 @@ def fetch_fx_quotes_yfinance(items: List[Tuple[str, str, str]]) -> List[QuoteOut
     return results
 
 
+# 优先使用新浪外汇，失败后自动回退到 yfinance。
 def fetch_fx_quotes_with_fallback(items: List[Tuple[str, str, str]]) -> List[QuoteOut]:
     """主从切换调度器"""
     quotes = fetch_fx_quotes_sina(items)

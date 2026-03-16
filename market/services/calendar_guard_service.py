@@ -47,6 +47,7 @@ class GuardDecision:
     session: str = "none"
 
 
+# 返回市场日历 CSV 所在目录。
 def _calendar_dir() -> Path:
     raw = str(getattr(settings, "MARKET_CALENDAR_DIR", "") or "").strip()
     if raw:
@@ -54,14 +55,17 @@ def _calendar_dir() -> Path:
     return (Path(getattr(settings, "BASE_DIR", Path.cwd())) / "data" / "market_calendars").resolve()
 
 
+# 判断当前配置是否要求市场日历必须存在。
 def _calendar_required() -> bool:
     return bool(getattr(settings, "MARKET_CALENDAR_REQUIRED", True))
 
 
+# 判断缺失市场日历时是否允许回退到旧的时段判断逻辑。
 def _fallback_on_missing_calendar() -> bool:
     return bool(getattr(settings, "MARKET_PULL_FALLBACK_ON_MISSING_CALENDAR", False))
 
 
+# 读取任务调度周期分钟数配置。
 def _task_tick_minutes() -> int:
     raw = getattr(settings, "MARKET_PULL_TASK_INTERVAL_MINUTES", DEFAULT_TICK_MINUTES)
     try:
@@ -71,6 +75,7 @@ def _task_tick_minutes() -> int:
     return max(1, min(value, 60))
 
 
+# 读取外汇行情抓取周期分钟数配置。
 def _fx_interval_minutes() -> int:
     raw = getattr(settings, "MARKET_FX_PULL_INTERVAL_MINUTES", 30)
     try:
@@ -80,6 +85,7 @@ def _fx_interval_minutes() -> int:
     return max(5, min(value, 240))
 
 
+# 读取加密货币行情抓取周期分钟数配置。
 def _crypto_interval_minutes() -> int:
     raw = getattr(settings, "MARKET_CRYPTO_PULL_INTERVAL_MINUTES", 10)
     try:
@@ -89,10 +95,12 @@ def _crypto_interval_minutes() -> int:
     return max(1, min(value, 60))
 
 
+# 统一市场代码格式为大写字符串。
 def _normalize_market(market: object) -> str:
     return str(market or "").strip().upper()
 
 
+# 将 ISO 时间字符串解析为带时区的时间对象。
 def _to_aware_iso(value: str | None, tz_name: str) -> datetime | None:
     raw = str(value or "").strip()
     if not raw:
@@ -106,11 +114,13 @@ def _to_aware_iso(value: str | None, tz_name: str) -> datetime | None:
     return dt.astimezone(ZoneInfo(tz_name))
 
 
+# 将常见布尔文本值解析为布尔类型。
 def _parse_bool(value: object) -> bool:
     raw = str(value or "").strip().lower()
     return raw in {"1", "true", "yes", "y"}
 
 
+# 从日历行数据中提取交易日期。
 def _date_from_row(row: dict) -> date | None:
     raw = str(row.get("trade_date") or "").strip()
     if raw:
@@ -127,6 +137,7 @@ def _date_from_row(row: dict) -> date | None:
         return None
 
 
+# 获取某个市场对应的日历文件列表。
 def _calendar_files(market: str) -> list[Path]:
     base = _calendar_dir()
     if not base.exists():
@@ -141,6 +152,7 @@ def _calendar_files(market: str) -> list[Path]:
     return files
 
 
+# 生成日历文件签名，用于判断缓存是否失效。
 def _files_signature(files: Iterable[Path]) -> tuple[tuple[str, int, int], ...]:
     signature = []
     for path in files:
@@ -155,6 +167,7 @@ def _files_signature(files: Iterable[Path]) -> tuple[tuple[str, int, int], ...]:
 _CALENDAR_CACHE: dict[str, tuple[tuple[tuple[str, int, int], ...], dict[date, CalendarDay]]] = {}
 
 
+# 读取并缓存某个市场的交易日历数据。
 def _load_market_calendar(market: str) -> dict[date, CalendarDay]:
     market_code = _normalize_market(market)
     files = _calendar_files(market_code)
@@ -189,6 +202,7 @@ def _load_market_calendar(market: str) -> dict[date, CalendarDay]:
     return table
 
 
+# 返回市场对应的默认时区名称。
 def _default_timezone_name(market: str) -> str:
     if market == MARKET_US:
         return "America/New_York"
@@ -199,6 +213,7 @@ def _default_timezone_name(market: str) -> str:
     return "UTC"
 
 
+# 读取指定市场最近一次行情抓取时间。
 def _last_market_pull_utc(market: str) -> datetime | None:
     key = f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}{market}"
     payload = cache.get(key)
@@ -219,6 +234,7 @@ def _last_market_pull_utc(market: str) -> datetime | None:
     return dt.astimezone(dt_timezone.utc)
 
 
+# 判断周期性抓取任务在当前时间点是否到期。
 def _aligned_interval_due(*, now_local: datetime, last_pull_local: datetime | None, interval_minutes: int) -> bool:
     if interval_minutes <= 0:
         return False
@@ -229,6 +245,7 @@ def _aligned_interval_due(*, now_local: datetime, last_pull_local: datetime | No
     return (now_local - last_pull_local) >= timedelta(minutes=interval_minutes)
 
 
+# 判断某个一次性触发时点是否已经到期。
 def _one_shot_due(*, now_local: datetime, last_pull_local: datetime | None, target: time, tick_minutes: int) -> bool:
     start = now_local.replace(hour=target.hour, minute=target.minute, second=0, microsecond=0)
     end = start + timedelta(minutes=tick_minutes)
@@ -239,6 +256,7 @@ def _one_shot_due(*, now_local: datetime, last_pull_local: datetime | None, targ
     return last_pull_local < start
 
 
+# 依据市场日历和时段规则评估某个有交易日历市场是否应抓取行情。
 def _evaluate_calendar_market(market: str, now_utc: datetime) -> GuardDecision:
     table = _load_market_calendar(market)
     if not table:
@@ -308,6 +326,7 @@ def _evaluate_calendar_market(market: str, now_utc: datetime) -> GuardDecision:
     return GuardDecision(market=market, should_pull=False, reason="unsupported_market")
 
 
+# 评估 24x7 或 24x5 市场在当前时间是否应抓取行情。
 def _evaluate_always_open_market(market: str, now_utc: datetime) -> GuardDecision:
     if market == MARKET_CRYPTO:
         interval = _crypto_interval_minutes()
@@ -332,6 +351,7 @@ def _evaluate_always_open_market(market: str, now_utc: datetime) -> GuardDecisio
     return GuardDecision(market=market, should_pull=False, reason="unsupported_market")
 
 
+# 返回单个市场当前的行情抓取决策结果。
 def market_guard_decision(market: str, now_utc: datetime | None = None) -> GuardDecision:
     now = now_utc or datetime.now(dt_timezone.utc)
     if now.tzinfo is None:
@@ -345,6 +365,7 @@ def market_guard_decision(market: str, now_utc: datetime | None = None) -> Guard
     return GuardDecision(market=market_code, should_pull=False, reason="unsupported_market")
 
 
+# 批量计算多个市场当前应抓取的市场集合及详细决策。
 def resolve_due_markets(markets: Iterable[str], now_utc: datetime | None = None) -> tuple[set[str], dict[str, GuardDecision]]:
     due: set[str] = set()
     decisions: dict[str, GuardDecision] = {}

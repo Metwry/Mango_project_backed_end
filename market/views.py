@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 class MarketsView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 返回当前用户自选市场的最新行情快照。
     def get(self, request, *args, **kwargs):
         return Response(build_user_markets_snapshot(request.user), status=status.HTTP_200_OK)
 
@@ -37,6 +38,7 @@ class MarketsView(APIView):
 class MarketFxRatesView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 返回指定基准货币对应的汇率快照。
     def get(self, request, *args, **kwargs):
         try:
             payload = get_fx_rates(request.query_params.get("base"))
@@ -51,6 +53,7 @@ class MarketFxRatesView(APIView):
 class MarketInstrumentSearchView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 根据关键词搜索可交易标的。
     def get(self, request, *args, **kwargs):
         params = MarketInstrumentSearchQuerySerializer(data=request.query_params)
         params.is_valid(raise_exception=True)
@@ -70,6 +73,7 @@ class MarketInstrumentSearchView(APIView):
 class MarketLatestQuoteBatchView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 批量返回多个标的的最新价格摘要。
     def post(self, request, *args, **kwargs):
         serializer = MarketLatestQuoteBatchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -80,6 +84,7 @@ class MarketLatestQuoteBatchView(APIView):
 class MarketIndexSnapshotView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 返回核心指数行情快照。
     def get(self, request, *args, **kwargs):
         return Response(build_market_indices_snapshot(), status=status.HTTP_200_OK)
 
@@ -87,6 +92,7 @@ class MarketIndexSnapshotView(APIView):
 class MarketWatchlistAddView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 将指定标的加入当前用户自选，并记录接口日志。
     def post(self, request, *args, **kwargs):
         started = perf_counter()
         user_id = getattr(request.user, "id", None)
@@ -122,6 +128,7 @@ class MarketWatchlistAddView(APIView):
         )
         return Response(result, status=status_code)
 
+    # 将指定标的从当前用户自选移除，并同步更新缓存行情。
     def delete(self, request, *args, **kwargs):
         started = perf_counter()
         user_id = getattr(request.user, "id", None)

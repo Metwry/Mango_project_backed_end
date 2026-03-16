@@ -15,14 +15,17 @@ ACCOUNT_PRECISION = Decimal("0.01")
 ZERO = Decimal("0")
 
 
+# 按持仓快照精度量化持仓金额相关数值。
 def _q_position(value: Decimal) -> Decimal:
     return quantize_decimal(value, POSITION_PRECISION)
 
 
+# 按账户展示精度量化账户金额。
 def _q_account(value: Decimal) -> Decimal:
     return quantize_decimal(value, ACCOUNT_PRECISION)
 
 
+# 推断持仓标的的计价币种。
 def _position_currency(position: Position) -> str:
     instrument = position.instrument
     base_currency = normalize_code(getattr(instrument, "base_currency", ""))
@@ -31,6 +34,7 @@ def _position_currency(position: Position) -> str:
     return market_currency(instrument.market, "USD")
 
 
+# 从行情索引中提取指定持仓的最新价格。
 def _position_quote_price(position: Position, quote_index: dict[tuple[str, str], dict]) -> Decimal | None:
     instrument = position.instrument
     market = normalize_code(instrument.market)
@@ -46,6 +50,7 @@ def _position_quote_price(position: Position, quote_index: dict[tuple[str, str],
     return price
 
 
+# 计算持仓在本币下的市值，并标记是否使用了实时行情。
 def _position_value_native(position: Position, quote_index: dict[tuple[str, str], dict]) -> tuple[Decimal, bool]:
     quantity = Decimal(str(position.quantity or ZERO))
     if quantity <= 0:
@@ -63,6 +68,7 @@ def _position_value_native(position: Position, quote_index: dict[tuple[str, str]
     return _q_position(quantity * avg_cost), False
 
 
+# 将本币金额按美元汇率转换为美元金额。
 def _to_usd_or_raise(amount: Decimal, currency: str, usd_rates: dict[str, Decimal]) -> Decimal:
     ccy = normalize_code(currency) or "USD"
     if ccy == "USD":
@@ -74,6 +80,7 @@ def _to_usd_or_raise(amount: Decimal, currency: str, usd_rates: dict[str, Decima
     return _q_position(amount / rate)
 
 
+# 将美元金额按目标币种汇率转换为账户本币金额。
 def _from_usd_or_raise(amount_usd: Decimal, currency: str, usd_rates: dict[str, Decimal]) -> Decimal:
     ccy = normalize_code(currency) or "USD"
     if ccy == "USD":
@@ -93,7 +100,7 @@ class InvestmentAccountValuation:
     quoted_position_count: int
     cost_fallback_position_count: int
 
-# 计算投资账户的余额
+# 计算一组持仓对应的系统投资账户估值结果。
 def calculate_investment_account_valuation(*, positions: list[Position], target_currency: str) -> InvestmentAccountValuation:
     account_currency = normalize_code(target_currency) or "USD"
     usd_rates = load_cached_usd_rates()

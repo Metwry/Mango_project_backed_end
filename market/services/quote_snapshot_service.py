@@ -14,6 +14,7 @@ from .cache_keys import (
 )
 
 
+# 将原始价格值安全转换为前端展示字符串。
 def safe_price_str(raw: object) -> str | None:
     value = to_decimal(raw)
     if value is None:
@@ -21,12 +22,14 @@ def safe_price_str(raw: object) -> str | None:
     return trim_decimal_str(value)
 
 
+# 构造孤儿行情缓存键。
 def orphan_quote_cache_key(market: object, short_code: object) -> str:
     market_code = normalize_code(market)
     code = normalize_code(short_code)
     return f"{WATCHLIST_QUOTES_ORPHAN_KEY_PREFIX}{market_code}:{code}"
 
 
+# 读取并规范化孤儿行情缓存 TTL 配置。
 def watchlist_orphan_ttl() -> int:
     raw = getattr(settings, "WATCHLIST_ORPHAN_QUOTE_TTL", DEFAULT_WATCHLIST_ORPHAN_TTL)
     try:
@@ -36,11 +39,13 @@ def watchlist_orphan_ttl() -> int:
     return max(60, ttl)
 
 
+# 读取当前自选行情总快照缓存。
 def get_snapshot_payload() -> dict:
     payload = cache.get(WATCHLIST_QUOTES_KEY) or {}
     return payload if isinstance(payload, dict) else {}
 
 
+# 将行情快照数据构建为按市场和短代码索引的字典。
 def build_quote_index(payload: object) -> dict[tuple[str, str], dict]:
     data = payload.get("data") if isinstance(payload, dict) else {}
     quote_index: dict[tuple[str, str], dict] = {}
@@ -61,6 +66,7 @@ def build_quote_index(payload: object) -> dict[tuple[str, str], dict]:
     return quote_index
 
 
+# 在单个市场行情列表中按短代码查找记录。
 def find_quote_by_code(rows: object, short_code: str) -> dict | None:
     if not isinstance(rows, list):
         return None
@@ -73,6 +79,7 @@ def find_quote_by_code(rows: object, short_code: str) -> dict | None:
     return None
 
 
+# 在指定市场行情列表中更新或追加一条行情记录。
 def upsert_market_quote(data: dict, market: str, quote_row: dict) -> None:
     market_rows = data.setdefault(market, [])
     if not isinstance(market_rows, list):
@@ -88,6 +95,7 @@ def upsert_market_quote(data: dict, market: str, quote_row: dict) -> None:
     market_rows.append(quote_row)
 
 
+# 将更新后的行情快照和市场级缓存写回缓存系统。
 def write_snapshot(payload: dict, data: dict, updated_markets: set[str]) -> None:
     if not updated_markets:
         return
@@ -136,6 +144,7 @@ def write_snapshot(payload: dict, data: dict, updated_markets: set[str]) -> None
             cache.delete(market_key)
 
 
+# 从指定市场行情列表中移除某个短代码对应的行情记录。
 def pop_quote_by_code(data: dict, market: str, short_code: str) -> dict | None:
     rows = data.get(market, [])
     if not isinstance(rows, list):
@@ -164,22 +173,26 @@ def pop_quote_by_code(data: dict, market: str, short_code: str) -> dict | None:
     return removed_row
 
 
+# 读取某个被移出快照但暂存的孤儿行情。
 def get_orphan_quote(market: str, short_code: str) -> dict | None:
     orphan_key = orphan_quote_cache_key(market, short_code)
     orphan_quote = cache.get(orphan_key)
     return orphan_quote if isinstance(orphan_quote, dict) else None
 
 
+# 保存一条孤儿行情，便于后续重新加入自选时复用。
 def save_orphan_quote(market: str, short_code: str, quote_row: dict) -> str:
     orphan_key = orphan_quote_cache_key(market, short_code)
     cache.set(orphan_key, quote_row, timeout=watchlist_orphan_ttl())
     return orphan_key
 
 
+# 删除指定孤儿行情缓存。
 def delete_orphan_quote(market: str, short_code: str) -> None:
     cache.delete(orphan_quote_cache_key(market, short_code))
 
 
+# 确保某个标的在行情缓存中存在，必要时从孤儿缓存或外部接口补齐。
 def ensure_instrument_quote(instrument, fetch_missing: bool = True, use_orphan: bool = True) -> tuple[bool, str]:
     market = normalize_code(instrument.market)
     short_code = normalize_code(instrument.short_code)

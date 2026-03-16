@@ -1,7 +1,7 @@
 from rest_framework.exceptions import ValidationError
 
 from ..models import Instrument, UserInstrumentSubscription
-from ..subscription_service import (
+from .subscription_service import (
     SOURCE_WATCHLIST,
     has_any_subscription_for_instrument,
     set_user_instrument_source,
@@ -16,6 +16,7 @@ from .quote_snapshot_service import (
 )
 from shared.utils import normalize_code
 
+# 将指定标的加入当前用户自选，并确保行情缓存可用。
 def add_watchlist_symbol(*, user, symbol: str) -> dict:
     normalized_symbol = normalize_code(symbol)
     instrument = (
@@ -61,6 +62,7 @@ def add_watchlist_symbol(*, user, symbol: str) -> dict:
     }
 
 
+# 按 symbol 或 market + short_code 查找当前用户的自选订阅记录。
 def _find_watchlist_subscriptions(*, user, symbol: str, market: str, short_code: str) -> list:
     if not symbol and not (market and short_code):
         raise ValidationError("请提供 symbol，或同时提供 market + short_code")
@@ -84,6 +86,7 @@ def _find_watchlist_subscriptions(*, user, symbol: str, market: str, short_code:
     return subscriptions
 
 
+# 将指定标的从当前用户自选移除，并在无人订阅时清理缓存行情。
 def delete_watchlist_symbol(*, user, symbol: str = "", market: str = "", short_code: str = "") -> dict:
     symbol = normalize_code(symbol)
     market = normalize_code(market)

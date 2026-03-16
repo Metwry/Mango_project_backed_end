@@ -18,6 +18,7 @@ from market.models import Instrument
 from shared.utils import normalize_code
 
 
+# 将港股代码标准化为 logo 服务可识别的 ticker 格式。
 def _normalize_hk_logo_ticker(code: str) -> str | None:
     value = str(code or "").strip().upper()
     if not value:
@@ -31,6 +32,7 @@ def _normalize_hk_logo_ticker(code: str) -> str | None:
     return f"{value}.HK"
 
 
+# 将 A 股代码标准化为 logo 服务可识别的 ticker 格式。
 def _normalize_cn_logo_ticker(code: str) -> str | None:
     value = str(code or "").strip().upper()
     if not value:
@@ -50,6 +52,7 @@ def _normalize_cn_logo_ticker(code: str) -> str | None:
     return None
 
 
+# 根据市场和短代码生成 logo 地址与来源信息。
 def build_logo_metadata(*, short_code: str, market: str) -> tuple[str | None, str | None]:
     code = normalize_code(short_code)
     market_code = normalize_code(market)
@@ -88,11 +91,13 @@ def build_logo_metadata(*, short_code: str, market: str) -> tuple[str | None, st
     return logo_url, source
 
 
+# 将 RGB 颜色值转换为十六进制颜色字符串。
 def _hex_color(rgb: tuple[int, int, int]) -> str:
     r, g, b = rgb
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
+# 返回本地 logo 下载目录，并在不存在时自动创建。
 def _logo_download_dir() -> Path:
     raw = str(getattr(settings, "LOGO_DOWNLOAD_DIR", "") or "").strip()
     if raw:
@@ -104,11 +109,13 @@ def _logo_download_dir() -> Path:
     return target
 
 
+# 将任意文件名片段清洗为安全的文件系统名称。
 def _safe_name(raw: str) -> str:
     s = re.sub(r"[^A-Za-z0-9._-]", "_", str(raw or "").strip())
     return s.strip("_") or "logo"
 
 
+# 根据 URL 和响应头猜测图片扩展名。
 def _guess_ext(url: str, content_type: str) -> str:
     parsed = urlparse(url)
     suffix = Path(parsed.path).suffix.lower()
@@ -131,6 +138,7 @@ def _guess_ext(url: str, content_type: str) -> str:
     return ".img"
 
 
+# 根据 logo URL 构造稳定的本地文件名。
 def _build_logo_filename(logo_url: str, ext: str) -> str:
     parsed = urlparse(logo_url)
     parts = [p for p in parsed.path.split("/") if p]
@@ -140,6 +148,7 @@ def _build_logo_filename(logo_url: str, ext: str) -> str:
     return f"{market}_{code}_{suffix}{ext}"
 
 
+# 下载 logo 到本地缓存目录，并优先复用已存在文件。
 def download_logo_to_local(logo_url: str, *, timeout: float = 8.0) -> Path | None:
     url = str(logo_url or "").strip()
     if not url:
@@ -185,6 +194,7 @@ def download_logo_to_local(logo_url: str, *, timeout: float = 8.0) -> Path | Non
     return file_path
 
 
+# 提取 logo 主色调，供前端展示使用。
 def extract_logo_theme_color(logo_url: str, *, timeout: float = 8.0) -> str | None:
     local_path = download_logo_to_local(logo_url, timeout=timeout)
     if local_path is None:

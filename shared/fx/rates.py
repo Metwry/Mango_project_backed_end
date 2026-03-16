@@ -3,6 +3,7 @@ from decimal import Decimal
 from shared.utils import normalize_code, to_decimal
 
 
+# 将任意来源的美元汇率载荷标准化为 `币种 -> Decimal` 映射。
 def normalize_usd_rates(raw_rates: object) -> dict[str, Decimal]:
     rates: dict[str, Decimal] = {"USD": Decimal("1")}
     if not isinstance(raw_rates, dict):

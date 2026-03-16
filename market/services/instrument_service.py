@@ -3,6 +3,7 @@ from django.db.models import Case, IntegerField, Q, Value, When
 from market.models import Instrument
 
 
+# 根据代码或名称搜索当前可交易的标的列表。
 def search_instruments(*, query: str, query_upper: str, limit: int):
     if not query:
         return Instrument.objects.none()

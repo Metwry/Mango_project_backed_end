@@ -1,6 +1,7 @@
 from investment.models import Position
 
 
+# 构建当前用户有效持仓列表查询集。
 def build_position_list_queryset(*, user):
     return (
         Position.objects
@@ -20,6 +21,7 @@ def build_position_list_queryset(*, user):
     )
 
 
+# 按筛选条件查询当前用户的投资交易历史。
 def query_investment_history(*, user, params: dict):
     queryset = (
         user.investment_records

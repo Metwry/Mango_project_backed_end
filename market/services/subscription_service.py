@@ -1,6 +1,6 @@
 from django.db import transaction
 
-from .models import UserInstrumentSubscription
+from ..models import UserInstrumentSubscription
 
 SOURCE_POSITION = "position"
 SOURCE_WATCHLIST = "watchlist"
@@ -10,6 +10,7 @@ SOURCE_TO_FIELD = {
 }
 
 
+# 设置用户与标的之间的订阅来源标记，并在无来源时自动删除订阅。
 def set_user_instrument_source(*, user, instrument, source: str, enabled: bool) -> UserInstrumentSubscription | None:
     field_name = SOURCE_TO_FIELD.get(source)
     if field_name is None:
@@ -46,5 +47,6 @@ def set_user_instrument_source(*, user, instrument, source: str, enabled: bool) 
         return subscription
 
 
+# 判断某个标的是否仍然存在任意用户订阅。
 def has_any_subscription_for_instrument(*, instrument_id: int) -> bool:
     return UserInstrumentSubscription.objects.filter(instrument_id=instrument_id).exists()

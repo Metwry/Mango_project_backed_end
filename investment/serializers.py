@@ -55,14 +55,17 @@ class PositionListItemSerializer(serializers.ModelSerializer):
             "current_value",
         ]
 
+    # 返回持仓当前成本价的字符串展示值。
     @staticmethod
     def get_current_cost_price(obj: Position) -> str:
         return trim_decimal_str(obj.avg_cost or POSITION_ZERO)
 
+    # 返回持仓当前数量的字符串展示值。
     @staticmethod
     def get_current_quantity(obj: Position) -> str:
         return trim_decimal_str(obj.quantity or POSITION_ZERO)
 
+    # 返回持仓当前成本总额的字符串展示值。
     @staticmethod
     def get_current_value(obj: Position) -> str:
         return trim_decimal_str(obj.cost_total or POSITION_ZERO)
@@ -81,10 +84,12 @@ class InvestmentHistoryQuerySerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False, min_value=1, max_value=1000, default=100)
     offset = serializers.IntegerField(required=False, min_value=0, default=0)
 
+    # 将时间参数统一规范化为 UTC 时区时间。
     @staticmethod
     def _normalize_datetime(value):
         return normalize_datetime_to_utc(value)
 
+    # 校验历史查询时间范围并统一起止时间格式。
     def validate(self, attrs):
         start = attrs.get("start")
         end = attrs.get("end")
@@ -127,6 +132,7 @@ class InvestmentHistoryItemSerializer(serializers.ModelSerializer):
             "created_at",
         ]
 
+    # 计算并返回该笔投资交易对应的资金流金额。
     @staticmethod
     def get_cash_flow_amount(obj: InvestmentRecord) -> str:
         if obj.cash_transaction_id:

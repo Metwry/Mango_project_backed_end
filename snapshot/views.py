@@ -10,6 +10,7 @@ from .services import build_account_snapshot_query_result, build_position_snapsh
 class AccountSnapshotQueryView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 查询账户维度的快照时间序列数据。
     def get(self, request, *args, **kwargs):
         serializer = AccountSnapshotQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
@@ -20,6 +21,7 @@ class AccountSnapshotQueryView(APIView):
 class PositionSnapshotQueryView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 查询持仓维度的快照时间序列数据。
     def get(self, request, *args, **kwargs):
         serializer = PositionSnapshotQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)

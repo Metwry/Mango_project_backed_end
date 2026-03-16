@@ -1,6 +1,7 @@
 from rest_framework.views import exception_handler
 
 
+# 从 DRF 异常详情结构中递归提取第一条可展示的错误信息。
 def _first_error_message(detail) -> str:
     if isinstance(detail, dict):
         if "message" in detail and detail["message"]:
@@ -18,6 +19,7 @@ def _first_error_message(detail) -> str:
     return str(detail)
 
 
+# 统一格式化 DRF 异常响应，确保前端稳定读取 `message` 字段。
 def custom_exception_handler(exc, context):
     response = exception_handler(exc, context)
     if response is None:
