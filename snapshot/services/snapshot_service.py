@@ -50,14 +50,17 @@ class _InvestmentAggregate:
         return SnapshotDataStatus.OK
 
 
+# 按快照金额精度量化金额字段。
 def _q_amount(value: Decimal) -> Decimal:
     return quantize_decimal(value, SNAPSHOT_PRECISION)
 
 
+# 按汇率精度量化汇率字段。
 def _q_fx(value: Decimal) -> Decimal:
     return quantize_decimal(value, FX_RATE_PRECISION)
 
 
+# 将输入时间对齐到指定快照粒度对应的时间桶。
 def _align_snapshot_time(raw_dt, level: str) -> timezone.datetime:
     dt = raw_dt or timezone.now()
     if timezone.is_naive(dt):
@@ -65,6 +68,7 @@ def _align_snapshot_time(raw_dt, level: str) -> timezone.datetime:
     return floor_bucket(dt, level)
 
 
+# 加载美元基准汇率，并统一量化到快照精度。
 def _load_usd_rates() -> tuple[dict[str, Decimal], str | None]:
     payload = get_fx_rates("USD")
     raw_rates = payload.get("rates", {}) if isinstance(payload, dict) else {}
@@ -77,6 +81,7 @@ def _load_usd_rates() -> tuple[dict[str, Decimal], str | None]:
     return rates, updated_at
 
 
+# 将指定币种金额转换为美元金额并返回所用汇率。
 def _to_usd(amount: Decimal, currency: str, usd_rates: dict[str, Decimal]) -> tuple[Decimal | None, Decimal | None]:
     ccy = normalize_code(currency) or "USD"
     if ccy == "USD":
@@ -87,6 +92,7 @@ def _to_usd(amount: Decimal, currency: str, usd_rates: dict[str, Decimal]) -> tu
     return _q_amount(amount / rate), rate
 
 
+# 将美元金额转换回目标币种金额并返回所用汇率。
 def _usd_to_native(amount_usd: Decimal, currency: str, usd_rates: dict[str, Decimal]) -> tuple[Decimal | None, Decimal | None]:
     ccy = normalize_code(currency) or "USD"
     if ccy == "USD":
@@ -97,6 +103,7 @@ def _usd_to_native(amount_usd: Decimal, currency: str, usd_rates: dict[str, Deci
     return _q_amount(amount_usd * rate), rate
 
 
+# 推断持仓标的对应的计价币种。
 def _position_currency(position: Position) -> str:
     instrument = position.instrument
     base_currency = normalize_code(getattr(instrument, "base_currency", ""))
@@ -105,6 +112,7 @@ def _position_currency(position: Position) -> str:
     return market_currency(instrument.market, "USD")
 
 
+# 从行情行中提取有效价格。
 def _quote_price(quote_row: dict[str, Any] | None) -> Decimal | None:
     if not isinstance(quote_row, dict):
         return None
@@ -114,6 +122,7 @@ def _quote_price(quote_row: dict[str, Any] | None) -> Decimal | None:
     return value
 
 
+# 解析行情更新时间，用于写入持仓快照中的 price_time。
 def _quote_time(quote_row: dict[str, Any] | None, default_ts: str | None) -> timezone.datetime | None:
     raw = None
     if isinstance(quote_row, dict):
@@ -129,6 +138,7 @@ def _quote_time(quote_row: dict[str, Any] | None, default_ts: str | None) -> tim
     return dt
 
 
+# 采集当前账户与持仓快照，并写入最细粒度快照表。
 def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> dict[str, int | str]:
     snapshot_level = str(level or SnapshotLevel.M15)
     snapshot_at = _align_snapshot_time(snapshot_time, snapshot_level)
@@ -285,6 +295,7 @@ def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> 
     }
 
 
+# 清理超过保留期的细粒度快照数据。
 def cleanup_expired_snapshots(*, now_dt=None) -> dict[str, int]:
     now_value = now_dt or timezone.now()
     account_deleted = 0
@@ -301,6 +312,7 @@ def cleanup_expired_snapshots(*, now_dt=None) -> dict[str, int]:
     }
 
 
+# 计算聚合快照所对应的源数据窗口起点。
 def _aggregation_window_start(snapshot_at: timezone.datetime, level: str) -> timezone.datetime:
     if level == SnapshotLevel.H4:
         return snapshot_at - timedelta(hours=4)
@@ -312,6 +324,7 @@ def _aggregation_window_start(snapshot_at: timezone.datetime, level: str) -> tim
     raise ValueError(f"unsupported aggregate level: {level}")
 
 
+# 查询指定时间窗口内每个账户最新的一条账户快照。
 def _latest_account_rows(source_level: str, window_start: timezone.datetime, window_end: timezone.datetime):
     return list(
         AccountSnapshot.objects
@@ -326,6 +339,7 @@ def _latest_account_rows(source_level: str, window_start: timezone.datetime, win
     )
 
 
+# 查询指定时间窗口内每个账户持仓的最新一条持仓快照。
 def _latest_position_rows(source_level: str, window_start: timezone.datetime, window_end: timezone.datetime):
     return list(
         PositionSnapshot.objects
@@ -340,6 +354,7 @@ def _latest_position_rows(source_level: str, window_start: timezone.datetime, wi
     )
 
 
+# 将细粒度快照聚合为更粗粒度快照，或在 M15 时直接执行采集。
 def aggregate_snapshots(*, level: str, snapshot_time=None) -> dict[str, int | str]:
     target_level = str(level or "")
     if target_level == SnapshotLevel.M15:

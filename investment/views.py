@@ -23,6 +23,7 @@ from .services import (
 class InvestmentBuyView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 执行买入交易并返回持仓与资金流水结果。
     def post(self, request, *args, **kwargs):
         serializer = InvestmentBuySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -33,6 +34,7 @@ class InvestmentBuyView(APIView):
 class InvestmentSellView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 执行卖出交易并返回持仓、已实现盈亏与资金流水结果。
     def post(self, request, *args, **kwargs):
         serializer = InvestmentSellSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -43,6 +45,7 @@ class InvestmentSellView(APIView):
 class InvestmentPositionListView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 返回当前用户的有效持仓列表。
     def get(self, request, *args, **kwargs):
         queryset = build_position_list_queryset(user=request.user)
         serializer = PositionListItemSerializer(queryset, many=True)
@@ -52,6 +55,7 @@ class InvestmentPositionListView(APIView):
 class InvestmentPositionDeleteView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 删除数量为 0 的持仓记录。
     def delete(self, request, instrument_id: int, *args, **kwargs):
         serializer = PositionDeleteSerializer(data={"instrument_id": instrument_id})
         serializer.is_valid(raise_exception=True)
@@ -65,6 +69,7 @@ class InvestmentPositionDeleteView(APIView):
 class InvestmentHistoryListView(APIView):
     permission_classes = [IsAuthenticated]
 
+    # 按筛选条件查询投资交易历史。
     def get(self, request, *args, **kwargs):
         query_serializer = InvestmentHistoryQuerySerializer(data=request.query_params)
         query_serializer.is_valid(raise_exception=True)

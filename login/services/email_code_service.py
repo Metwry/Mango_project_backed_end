@@ -12,26 +12,31 @@ EMAIL_CODE_CACHE_KEY_PREFIX = "login:register:email-code:"
 PASSWORD_RESET_CODE_CACHE_KEY_PREFIX = "login:password-reset:email-code:"
 
 
+# 生成注册邮箱验证码缓存键。
 def email_code_cache_key(email: str) -> str:
     return f"{EMAIL_CODE_CACHE_KEY_PREFIX}{email.strip().lower()}"
 
 
+# 生成重置密码验证码缓存键。
 def password_reset_code_cache_key(email: str) -> str:
     return f"{PASSWORD_RESET_CODE_CACHE_KEY_PREFIX}{email.strip().lower()}"
 
 
+# 校验邮箱尚未注册，用于注册流程。
 def ensure_email_not_registered(email: str) -> None:
     user_model = get_user_model()
     if user_model.objects.filter(email__iexact=email).exists():
         raise ValueError("该邮箱已注册")
 
 
+# 校验邮箱已经注册，用于找回密码流程。
 def ensure_email_registered(email: str) -> None:
     user_model = get_user_model()
     if not user_model.objects.filter(email__iexact=email).exists():
         raise ValueError("该邮箱未注册")
 
 
+# 生成验证码、写入缓存并发送邮件模板。
 def _send_email_code(*, email: str, subject: str, cache_key: str) -> None:
     code = f"{random.randint(0, 999999):06d}"
     cache.set(
@@ -56,6 +61,7 @@ def _send_email_code(*, email: str, subject: str, cache_key: str) -> None:
     message.send(fail_silently=False)
 
 
+# 发送注册邮箱验证码。
 def send_register_email_code(email: str) -> None:
     _send_email_code(
         email=email,
@@ -64,6 +70,7 @@ def send_register_email_code(email: str) -> None:
     )
 
 
+# 发送密码重置邮箱验证码。
 def send_password_reset_email_code(email: str) -> None:
     _send_email_code(
         email=email,
@@ -72,6 +79,7 @@ def send_password_reset_email_code(email: str) -> None:
     )
 
 
+# 校验缓存中的邮箱验证码是否正确。
 def _verify_email_code(*, cache_key: str, code: str) -> None:
     payload = cache.get(cache_key)
     if not isinstance(payload, dict):
@@ -82,21 +90,26 @@ def _verify_email_code(*, cache_key: str, code: str) -> None:
         raise ValueError("验证码错误")
 
 
+# 校验注册流程使用的邮箱验证码。
 def verify_register_email_code(email: str, code: str) -> None:
     _verify_email_code(cache_key=email_code_cache_key(email), code=code)
 
 
+# 校验重置密码流程使用的邮箱验证码。
 def verify_password_reset_email_code(email: str, code: str) -> None:
     _verify_email_code(cache_key=password_reset_code_cache_key(email), code=code)
 
 
+# 删除指定缓存键对应的邮箱验证码。
 def _clear_email_code(cache_key: str) -> None:
     cache.delete(cache_key)
 
 
+# 清理注册流程验证码缓存。
 def clear_register_email_code(email: str) -> None:
     _clear_email_code(email_code_cache_key(email))
 
 
+# 清理重置密码流程验证码缓存。
 def clear_password_reset_email_code(email: str) -> None:
     _clear_email_code(password_reset_code_cache_key(email))

@@ -12,10 +12,12 @@ class SnapshotQueryBaseSerializer(serializers.Serializer):
     end_time = serializers.DateTimeField()
     limit = serializers.IntegerField(required=False, min_value=1, max_value=10000, default=2000)
 
+    # 将查询时间统一转换为 UTC 时间。
     @staticmethod
     def _normalize_datetime(value):
         return normalize_datetime_to_utc(value)
 
+    # 校验快照查询时间范围及不同粒度下允许的最大跨度。
     def validate(self, attrs):
         start_time = self._normalize_datetime(attrs["start_time"])
         end_time = self._normalize_datetime(attrs["end_time"])

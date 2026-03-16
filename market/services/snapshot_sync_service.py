@@ -25,6 +25,7 @@ from .subscription_query_service import global_subscription_meta_by_market
 
 logger = logging.getLogger(__name__)
 
+# 根据订阅代码集合过滤行情快照，只保留实际仍被订阅的标的。
 def _filter_snapshot_by_subscription(
     snapshot: Dict[str, List[dict]],
     subscription_codes: Dict[str, Set[str]],
@@ -46,6 +47,7 @@ def _filter_snapshot_by_subscription(
     return filtered
 
 
+# 提取一组行情行中的短代码集合。
 def _snapshot_code_set(rows: object) -> Set[str]:
     codes: Set[str] = set()
     if not isinstance(rows, list):
@@ -59,6 +61,7 @@ def _snapshot_code_set(rows: object) -> Set[str]:
     return codes
 
 
+# 将行情列表按短代码索引，便于后续合并。
 def _index_rows_by_code(rows: object) -> Dict[str, dict]:
     out: Dict[str, dict] = {}
     if not isinstance(rows, list):
@@ -72,6 +75,7 @@ def _index_rows_by_code(rows: object) -> Dict[str, dict]:
     return out
 
 
+# 为缺失行情的订阅标的构造空值占位记录。
 def _build_null_quote_row(meta: dict) -> dict:
     short_code = resolve_short_code(meta.get("short_code"), meta.get("symbol"))
     return {
@@ -88,6 +92,7 @@ def _build_null_quote_row(meta: dict) -> dict:
     }
 
 
+# 将行情行与订阅元数据合并，补齐 logo 和名称等信息。
 def _row_with_meta(row: dict, meta: dict) -> dict:
     merged = dict(row)
     merged["short_code"] = normalize_code(merged.get("short_code")) or normalize_code(meta.get("short_code"))
@@ -97,6 +102,7 @@ def _row_with_meta(row: dict, meta: dict) -> dict:
     return merged
 
 
+# 将新行情、旧缓存和订阅元数据合并为完整快照，并统计回退数量。
 def _merge_snapshot_with_fallback(
     previous_data: Dict[str, List[dict]],
     latest_quotes: Dict[str, List[dict]],
@@ -130,6 +136,7 @@ def _merge_snapshot_with_fallback(
     return merged, reused_previous, filled_null
 
 
+# 计算当前快照中仍然缺失的订阅标的代码。
 def _missing_subscription_codes(
     snapshot: Dict[str, List[dict]],
     subscription_codes: Dict[str, Set[str]],
@@ -143,6 +150,7 @@ def _missing_subscription_codes(
     return missing
 
 
+# 将缓存中的 ISO 时间字符串解析为时区感知时间。
 def _parse_iso_datetime(raw: object) -> datetime | None:
     if not isinstance(raw, str) or not raw.strip():
         return None
@@ -155,6 +163,7 @@ def _parse_iso_datetime(raw: object) -> datetime | None:
     return dt
 
 
+# 判断当前是否需要刷新美元基准汇率快照。
 def _need_refresh_fx_rates(now_local: datetime) -> bool:
     payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}
     if not isinstance(payload, dict):
@@ -175,6 +184,7 @@ def _need_refresh_fx_rates(now_local: datetime) -> bool:
     return now_local - last_updated.astimezone(UTC8) >= FX_REFRESH_INTERVAL
 
 
+# 同步自选行情总快照、市场分片缓存和美元汇率缓存。
 def sync_watchlist_snapshot() -> dict:
     now_local = timezone.now().astimezone(UTC8)
     previous_payload = cache.get(WATCHLIST_QUOTES_KEY) or {}

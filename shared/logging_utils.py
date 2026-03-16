@@ -1,6 +1,7 @@
 from typing import Any
 
 
+# 将日志字段值标准化为适合结构化日志输出的字符串。
 def _format_log_value(value: Any) -> str:
     if value is None:
         return "null"
@@ -9,6 +10,7 @@ def _format_log_value(value: Any) -> str:
     return str(value)
 
 
+# 将键值字段按固定顺序拼接为日志扩展字段字符串。
 def _format_log_fields(**fields: Any) -> str:
     items = []
     for key in sorted(fields.keys()):
@@ -16,6 +18,7 @@ def _format_log_fields(**fields: Any) -> str:
     return " ".join(items)
 
 
+# 输出带事件名和扩展字段的 info 级日志。
 def log_info(logger, event: str, **fields: Any) -> None:
     payload = _format_log_fields(**fields)
     if payload:

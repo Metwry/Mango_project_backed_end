@@ -1,0 +1,1 @@
+"""Snapshot app tests."""

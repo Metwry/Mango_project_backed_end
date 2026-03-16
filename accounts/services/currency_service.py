@@ -9,12 +9,14 @@ from shared.utils import normalize_code, quantize_decimal
 ACCOUNT_PRECISION = Decimal("0.01")
 
 
+# ed 从缓存中读取并标准化美元基准汇率表。
 def load_cached_usd_rates() -> dict[str, Decimal]:
     payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}
     raw_rates = payload.get("rates") if isinstance(payload, dict) else {}
     return normalize_usd_rates(raw_rates)
 
 
+# 按缓存汇率将金额从源币种转换到目标币种，缺少汇率时抛出异常。
 def convert_amount_or_raise(*, amount: Decimal, from_currency: str, to_currency: str) -> Decimal:
     source = normalize_code(from_currency)
     target = normalize_code(to_currency)

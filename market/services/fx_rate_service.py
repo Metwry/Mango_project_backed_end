@@ -7,10 +7,12 @@ from shared.fx import normalize_usd_rates
 from .cache_keys import USD_EXCHANGE_RATES_KEY, UTC8, WATCHLIST_QUOTES_KEY
 
 
+# 将任意汇率载荷标准化为浮点数字典。
 def _normalize_rates(raw_rates: object) -> dict[str, float]:
     return {code: float(value) for code, value in normalize_usd_rates(raw_rates).items()}
 
 
+# 返回指定基准币种对应的汇率快照，必要时触发重新拉取。
 def get_fx_rates(requested_base: str) -> dict:
     base = str(requested_base or "USD").strip().upper()
 

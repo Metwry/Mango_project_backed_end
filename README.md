@@ -25,7 +25,7 @@ Mango Backend 是 Mango Finance 的后端服务，基于 Django + Django REST Fr
 ### 3. 核心业务模块
 
 - [login/README.md](login/README.md)：邮箱注册、邮箱验证码、密码重置、登录和用户名维护
-- [accounts/README.md](accounts/README.md)：资金账户、流水、转账、撤销与归档
+- [accounts/README.md](accounts/README.md)：资金账户、流水、简化转账、撤销与归档
 - [market/README.md](market/README.md)：交易品种、行情查询、自选股、汇率和指数快照
 - [investment/README.md](investment/README.md)：买卖记录、持仓、已实现盈亏
 - [snapshot/README.md](snapshot/README.md)：账户和持仓快照采集、聚合、查询
@@ -37,7 +37,7 @@ Mango Backend 是 Mango Finance 的后端服务，基于 Django + Django REST Fr
 .
 |-- mango_project/   Django 工程入口、配置、URL、Celery
 |-- login/           认证与用户登录相关接口
-|-- accounts/        账户、流水、转账
+|-- accounts/        账户、流水、简化转账
 |-- market/          行情与交易品种
 |-- investment/      投资交易与持仓
 |-- snapshot/        快照采集与查询
@@ -91,7 +91,6 @@ celery -A mango_project beat -l info
 - `/api/password/reset/`
 - `/api/user/accounts/`
 - `/api/user/transactions/`
-- `/api/user/transfers/`
 - `/api/user/markets/`
 - `/api/investment/*`
 - `/api/snapshot/*`
@@ -122,7 +121,7 @@ Mango Backend is the API service behind Mango Finance. It is built with Django a
 | Path | Responsibility |
 | --- | --- |
 | [login/README.md](login/README.md) | Authentication, email verification, JWT issuing |
-| [accounts/README.md](accounts/README.md) | Accounts, transactions, transfers |
+| [accounts/README.md](accounts/README.md) | Accounts, transactions, simplified transfers |
 | [market/README.md](market/README.md) | Instrument master data, quotes, FX, watchlist |
 | [investment/README.md](investment/README.md) | Buy/sell execution, positions, trade history |
 | [snapshot/README.md](snapshot/README.md) | Timed snapshots, aggregation, query APIs |

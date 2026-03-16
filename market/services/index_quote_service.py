@@ -25,10 +25,12 @@ except Exception:
     yf = None
 
 
+# 返回当前指数行情提供方配置。
 def _index_provider() -> str:
     return str(getattr(settings, "MARKET_INDEX_PROVIDER", "yfinance") or "yfinance").strip().lower()
 
 
+# 查询数据库中的核心指数并按市场分组。
 def _group_instruments_by_market() -> dict[str, list[Instrument]]:
     symbols = [item.symbol for item in CORE_INDEX_DEFINITIONS]
     rows = list(
@@ -43,6 +45,7 @@ def _group_instruments_by_market() -> dict[str, list[Instrument]]:
     return dict(grouped)
 
 
+# 将任意可解析数值安全转换为字符串。
 def _safe_str_decimal(value: object) -> str | None:
     parsed = to_decimal(value)
     if parsed is None:
@@ -50,6 +53,7 @@ def _safe_str_decimal(value: object) -> str | None:
     return trim_decimal_str(parsed)
 
 
+# 为缺失行情的指数构造空值占位行。
 def _build_null_row(inst: Instrument) -> dict:
     return {
         "symbol": inst.symbol,
@@ -62,6 +66,7 @@ def _build_null_row(inst: Instrument) -> dict:
     }
 
 
+# 在假数据模式下构造指数行情结果。
 def _fake_index_rows(instruments: list[Instrument]) -> list[dict]:
     rows = []
     for idx, inst in enumerate(instruments, start=1):
@@ -81,6 +86,7 @@ def _fake_index_rows(instruments: list[Instrument]) -> list[dict]:
     return rows
 
 
+# 从 yfinance 返回的 DataFrame 中提取单个字段序列。
 def _extract_series_value(frame, field: str, provider_symbol: str):
     if frame is None:
         return None
@@ -104,6 +110,7 @@ def _extract_series_value(frame, field: str, provider_symbol: str):
     return series
 
 
+# 通过 yfinance 拉取指定指数列表的历史行情。
 def _fetch_rows_yfinance(instruments: list[Instrument]) -> list[dict]:
     if yf is None:
         raise ValidationError({"message": "yfinance 未安装，无法拉取指数行情。"})
@@ -163,6 +170,7 @@ def _fetch_rows_yfinance(instruments: list[Instrument]) -> list[dict]:
     return rows
 
 
+# 根据当前配置选择真实或假数据方式拉取指数行情。
 def _fetch_rows_for_market(instruments: list[Instrument]) -> list[dict]:
     provider = _index_provider()
     quote_provider_mode = str(getattr(settings, "MARKET_QUOTE_PROVIDER", "real") or "real").strip().lower()
@@ -173,11 +181,13 @@ def _fetch_rows_for_market(instruments: list[Instrument]) -> list[dict]:
     raise ValidationError({"message": f"不支持的指数行情源：{provider}"})
 
 
+# 读取上一次写入的指数行情快照。
 def _previous_payload() -> dict:
     payload = cache.get(MARKET_INDEX_QUOTES_KEY) or {}
     return payload if isinstance(payload, dict) else {}
 
 
+# 将行情列表构建为按 symbol 索引的字典。
 def _index_by_symbol(rows: object) -> dict[str, dict]:
     out: dict[str, dict] = {}
     if not isinstance(rows, list):
@@ -191,6 +201,7 @@ def _index_by_symbol(rows: object) -> dict[str, dict]:
     return out
 
 
+# 将指数行情总快照和市场分片缓存写回缓存系统。
 def _write_payload(data: dict[str, list[dict]], updated_markets: set[str]) -> dict:
     now_iso = django_timezone.now().astimezone(timezone.utc).isoformat()
     stale_markets = sorted(set(data.keys()) - updated_markets)
@@ -215,6 +226,7 @@ def _write_payload(data: dict[str, list[dict]], updated_markets: set[str]) -> di
     return payload
 
 
+# 构建核心指数行情快照，并在必要时刷新缓存。
 def build_market_indices_snapshot() -> dict:
     grouped = _group_instruments_by_market()
     previous = _previous_payload()

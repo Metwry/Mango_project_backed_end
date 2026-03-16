@@ -5,6 +5,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .email_code_service import clear_password_reset_email_code, clear_register_email_code
 
+# 按用户名或邮箱验证用户密码并返回认证成功的用户对象。
 def authenticate_email_password(request, *, identifier: str, password: str):
     token = (identifier or "").strip()
     if not token or not password:
@@ -12,6 +13,7 @@ def authenticate_email_password(request, *, identifier: str, password: str):
 
     tried: set[str] = set()
 
+    # 尝试使用给定用户名进行一次认证。
     def _try_login(username: str):
         candidate = (username or "").strip()
         if not candidate or candidate in tried:
@@ -43,6 +45,7 @@ def authenticate_email_password(request, *, identifier: str, password: str):
     return None
 
 
+# 生成登录成功后的令牌和用户摘要信息。
 def build_login_payload(user) -> dict:
     refresh = RefreshToken.for_user(user)
     user.last_login = timezone.now()
@@ -58,6 +61,7 @@ def build_login_payload(user) -> dict:
     }
 
 
+# 使用邮箱注册新用户并清理注册验证码缓存。
 def register_user_by_email(*, email: str, password: str):
     user_model = get_user_model()
     try:
@@ -76,6 +80,7 @@ def register_user_by_email(*, email: str, password: str):
     }
 
 
+# 通过邮箱重置用户密码并清理验证码缓存。
 def reset_user_password_by_email(*, email: str, password: str) -> None:
     user_model = get_user_model()
     user = user_model.objects.filter(email__iexact=email).first()
@@ -86,6 +91,7 @@ def reset_user_password_by_email(*, email: str, password: str) -> None:
     clear_password_reset_email_code(email)
 
 
+# 修改当前用户用户名并返回最新用户摘要。
 def update_username_for_user(*, user, username: str) -> dict:
     user_model = get_user_model()
     next_username = (username or "").strip()

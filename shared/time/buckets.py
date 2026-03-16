@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 
+# 将任意时间规范化为按分钟对齐的 UTC 时间。
 def _as_utc_minute(dt: datetime) -> datetime:
     value = dt
     if value.tzinfo is None:
@@ -8,6 +9,7 @@ def _as_utc_minute(dt: datetime) -> datetime:
     return value.astimezone(dt_timezone.utc).replace(second=0, microsecond=0)
 
 
+# 按快照粒度将时间向下对齐到对应时间桶起点。
 def floor_bucket(dt: datetime, level: str) -> datetime:
     ts = _as_utc_minute(dt)
     if level == "M15":
@@ -21,6 +23,7 @@ def floor_bucket(dt: datetime, level: str) -> datetime:
     return ts
 
 
+# 返回当前时间桶的下一个时间桶起点。
 def next_bucket(ts: datetime, level: str) -> datetime:
     if level == "M15":
         return ts + timedelta(minutes=15)
@@ -38,6 +41,7 @@ def next_bucket(ts: datetime, level: str) -> datetime:
     return ts
 
 
+# 按快照粒度将时间向上对齐到最近的时间桶起点。
 def ceil_bucket(dt: datetime, level: str) -> datetime:
     floored = floor_bucket(dt, level)
     raw = _as_utc_minute(dt)
@@ -46,6 +50,7 @@ def ceil_bucket(dt: datetime, level: str) -> datetime:
     return floored
 
 
+# 构建起止时间之间的完整时间桶坐标轴。
 def build_bucket_axis(start_time: datetime, end_time: datetime, level: str) -> tuple[list[datetime], datetime, datetime]:
     axis_start = ceil_bucket(start_time, level)
     axis_end = floor_bucket(end_time, level)

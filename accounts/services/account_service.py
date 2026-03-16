@@ -9,18 +9,18 @@ from .currency_service import convert_amount_or_raise
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 
-# 判断归档字段的值
+# 解析是否需要包含已归档账户的布尔开关。
 def should_include_archived(raw_value) -> bool:
     return str(raw_value or "").strip().lower() in TRUE_VALUES
 
-# 返回账户信息
+# 返回当前用户的账户查询集，并按需要排除已归档账户。
 def get_user_accounts_queryset(*, user, include_archived: bool):
     queryset = Accounts.objects.filter(user=user).order_by("-balance")
     if not include_archived:
         queryset = queryset.exclude(status=Accounts.Status.ARCHIVED)
     return queryset
 
-# 通过userid，参数，修改账户
+# 根据序列化器输入更新账户，并处理币种转换或投资账户同步。
 def update_account_from_serializer(*, serializer):
     instance: Accounts = serializer.instance
     previous_currency = instance.currency
@@ -58,7 +58,7 @@ def update_account_from_serializer(*, serializer):
     with db_transaction.atomic():
         return serializer.save(**extra_save_kwargs)
 
-# 归档投资账户
+# 将普通账户归档；系统投资账户会直接返回冲突信息。
 def archive_account(*, account: Accounts, user) -> dict | None:
     if is_system_investment_account(account=account):
         return {

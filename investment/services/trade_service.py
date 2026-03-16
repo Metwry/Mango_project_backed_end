@@ -6,9 +6,10 @@ from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied
 
 from accounts.models import Accounts, Transaction
+from accounts.services.transaction_service import create_transaction_for_locked_account
 from market.models import Instrument
 from market.services.quote_snapshot_service import ensure_instrument_quote
-from market.subscription_service import SOURCE_POSITION, set_user_instrument_source
+from market.services.subscription_service import SOURCE_POSITION, set_user_instrument_source
 from shared.constants import market_currency
 from shared.exceptions import BusinessConflictError
 from shared.utils import quantize_decimal, trim_decimal, trim_decimal_str
@@ -22,14 +23,17 @@ POSITION_ZERO = Decimal("0")
 ConflictError = BusinessConflictError
 
 
+# 按持仓精度量化数量、成本等仓位数值。
 def quantize_position(value: Decimal) -> Decimal:
     return quantize_decimal(value, POSITION_PRECISION)
 
 
+# 按账户精度量化现金类金额。
 def quantize_account(value: Decimal) -> Decimal:
     return quantize_decimal(value, ACCOUNT_PRECISION)
 
 
+# 推断某个标的交易应使用的账户币种。
 def _expected_currency_for_instrument(instrument: Instrument) -> str:
     base_currency = str(getattr(instrument, "base_currency", "") or "").strip().upper()
     if base_currency:
@@ -37,12 +41,14 @@ def _expected_currency_for_instrument(instrument: Instrument) -> str:
     return market_currency(instrument.market, "")
 
 
+# 生成受长度限制的交易分类描述文本。
 def _safe_category_name(*, side: str, price: Decimal, quantity: Decimal) -> str:
     action = "买入" if side == InvestmentRecord.Side.BUY else "卖出"
     raw = f"以 {trim_decimal_str(price)}价格{action}:{trim_decimal_str(quantity)}"
     return raw[:24]
 
 
+# 查询并校验交易标的是否存在且允许交易。
 def _get_instrument(instrument_id: int) -> Instrument:
     instrument = (
         Instrument.objects
@@ -59,6 +65,7 @@ def _get_instrument(instrument_id: int) -> Instrument:
     return instrument
 
 
+# 锁定资金账户并校验用户权限、状态和币种匹配关系。
 def _lock_account(*, user, cash_account_id: int, instrument: Instrument) -> Accounts:
     account = (
         Accounts.objects
@@ -81,6 +88,7 @@ def _lock_account(*, user, cash_account_id: int, instrument: Instrument) -> Acco
     return account
 
 
+# 锁定持仓记录；在允许缺失时自动创建空持仓。
 def _lock_or_create_position(*, user, instrument: Instrument, create_if_missing: bool) -> Position:
     position = (
         Position.objects
@@ -101,11 +109,13 @@ def _lock_or_create_position(*, user, instrument: Instrument, create_if_missing:
     return Position.objects.select_for_update().get(user=user, instrument=instrument)
 
 
+# 校验按账户精度入账后的交易金额必须大于零。
 def _assert_trade_amount_positive(amount: Decimal):
     if amount <= 0:
         raise ConflictError("成交金额过小，按账户精度入账后为 0.00")
 
 
+# 组装买卖接口统一返回的结果结构。
 def _build_response(*, record: InvestmentRecord, position: Position, tx: Transaction, realized_pnl=None):
     payload = {
         "investment_record_id": record.id,
@@ -124,6 +134,7 @@ def _build_response(*, record: InvestmentRecord, position: Position, tx: Transac
     return payload
 
 
+# 尝试预热指定标的的行情缓存，失败时静默忽略。
 def _warm_quote_snapshot_for_instrument(instrument: Instrument) -> None:
     try:
         ensure_instrument_quote(instrument, fetch_missing=True, use_orphan=False)
@@ -131,6 +142,7 @@ def _warm_quote_snapshot_for_instrument(instrument: Instrument) -> None:
         return
 
 
+# 同步系统投资账户，出现业务异常时转换为统一冲突错误。
 def _sync_investment_account_or_raise(*, user) -> None:
     try:
         sync_investment_account_for_user(user=user)
@@ -138,6 +150,7 @@ def _sync_investment_account_or_raise(*, user) -> None:
         raise ConflictError(str(exc))
 
 
+# 执行买入交易，并同步资金流水、持仓和系统投资账户。
 def execute_buy(*, user, instrument_id: int, quantity: Decimal, price: Decimal, cash_account_id: int, trade_at=None) -> dict:
     trade_at = trade_at or timezone.now()
     with transaction.atomic():
@@ -155,12 +168,12 @@ def execute_buy(*, user, instrument_id: int, quantity: Decimal, price: Decimal, 
         if account.balance < account_cost:
             raise ConflictError("余额不足")
 
-        tx = Transaction.objects.create(
+        tx = create_transaction_for_locked_account(
             user=user,
             account=account,
             counterparty=instrument.name,
-            category_name=_safe_category_name(side=InvestmentRecord.Side.BUY, price=price, quantity=quantity),
             amount=POSITION_ZERO - account_cost,
+            category_name=_safe_category_name(side=InvestmentRecord.Side.BUY, price=price, quantity=quantity),
             add_date=trade_at,
             source=Transaction.Source.INVESTMENT,
         )
@@ -200,6 +213,7 @@ def execute_buy(*, user, instrument_id: int, quantity: Decimal, price: Decimal, 
     return _build_response(record=record, position=position, tx=tx)
 
 
+# 执行卖出交易，并同步资金流水、持仓和已实现盈亏。
 def execute_sell(*, user, instrument_id: int, quantity: Decimal, price: Decimal, cash_account_id: int, trade_at=None) -> dict:
     trade_at = trade_at or timezone.now()
     with transaction.atomic():
@@ -238,12 +252,12 @@ def execute_sell(*, user, instrument_id: int, quantity: Decimal, price: Decimal,
                 raise ConflictError("持仓成本异常，无法卖出")
             new_avg_cost = quantize_position(new_cost_total / new_qty)
 
-        tx = Transaction.objects.create(
+        tx = create_transaction_for_locked_account(
             user=user,
             account=account,
             counterparty=instrument.name,
-            category_name=_safe_category_name(side=InvestmentRecord.Side.SELL, price=price, quantity=quantity),
             amount=account_proceeds,
+            category_name=_safe_category_name(side=InvestmentRecord.Side.SELL, price=price, quantity=quantity),
             add_date=trade_at,
             source=Transaction.Source.INVESTMENT,
         )
@@ -294,6 +308,7 @@ def execute_sell(*, user, instrument_id: int, quantity: Decimal, price: Decimal,
     )
 
 
+# 删除数量已经清零的持仓记录，并同步订阅与投资账户。
 def delete_zero_position(*, user, instrument_id: int) -> dict:
     with transaction.atomic():
         position = (

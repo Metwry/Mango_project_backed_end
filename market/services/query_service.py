@@ -7,6 +7,7 @@ from .subscription_query_service import user_watchlist_codes_by_market
 from shared.utils import resolve_short_code
 
 
+# 按允许的短代码集合过滤某个市场的行情列表。
 def _filter_quotes(rows, allow_codes):
     if not isinstance(rows, list):
         return []
@@ -24,6 +25,7 @@ def _filter_quotes(rows, allow_codes):
     return filtered
 
 
+# 为当前用户构建按市场分组的自选行情快照。
 def build_user_markets_snapshot(user) -> dict:
     payload = get_snapshot_payload()
     data = payload.get("data")
@@ -54,6 +56,7 @@ def build_user_markets_snapshot(user) -> dict:
     }
 
 
+# 从缓存快照中批量提取指定标的的最新价格摘要。
 def build_latest_quotes(items: list[dict]) -> list[dict]:
     payload = get_snapshot_payload()
     quote_index = build_quote_index(payload)

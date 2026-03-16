@@ -47,23 +47,28 @@ FAKE_USD_RATES = {
 }
 
 
+# 返回当前配置的行情提供方模式。
 def _quote_provider_mode() -> str:
     return str(getattr(settings, "MARKET_QUOTE_PROVIDER", "real") or "real").strip().lower()
 
 
+# 判断当前是否启用假行情提供方。
 def _use_fake_provider() -> bool:
     return _quote_provider_mode() == "fake"
 
 
+# 为给定文本生成稳定哈希，用于构造可重复的假行情波动。
 def _stable_hash(text: str) -> int:
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     return int(digest[:12], 16)
 
 
+# 将当前时间归并到按分钟切分的假行情时间桶。
 def _fake_bucket(now_utc: datetime) -> int:
     return int(now_utc.timestamp() // 60)
 
 
+# 从外汇代码中解析基础币种和计价币种。
 def _fx_pair_from_code(raw: str) -> tuple[str, str] | None:
     s = str(raw or "").strip().upper()
     if s.endswith(".FX"):
@@ -74,6 +79,7 @@ def _fx_pair_from_code(raw: str) -> tuple[str, str] | None:
     return m.group(1), m.group(2)
 
 
+# 为外汇短代码生成假行情价格。
 def _fake_fx_price(short_code: str) -> float:
     pair = _fx_pair_from_code(short_code)
     if not pair:
@@ -93,6 +99,7 @@ def _fake_fx_price(short_code: str) -> float:
     return float(quote_rate / base_rate)
 
 
+# 按市场与代码生成稳定波动的假行情价格。
 def _fake_market_price(market: str, short_code: str, bucket: int) -> float:
     market_code = str(market or "").upper()
     code = str(short_code or "").upper()
@@ -110,6 +117,7 @@ def _fake_market_price(market: str, short_code: str, bucket: int) -> float:
     return round(max(price, 0.0001), 6)
 
 
+# 组装单条假行情结果。
 def _build_fake_quote_row(*, market: str, symbol: str, short_code: str, name: str, now_utc: datetime) -> dict:
     code = short_code or _strip_symbol_suffix(symbol)
     bucket = _fake_bucket(now_utc)
@@ -132,6 +140,7 @@ def _build_fake_quote_row(*, market: str, symbol: str, short_code: str, name: st
     }
 
 
+# 按市场批量生成订阅标的的假行情快照。
 def _pull_watchlist_quotes_fake(
     *,
     now_utc: datetime,
@@ -166,6 +175,7 @@ def _pull_watchlist_quotes_fake(
     return out
 
 
+# 从行情代码中解析标准化外汇货币对。
 def _parse_fx_pair(raw: object) -> Optional[Tuple[str, str]]:
     if raw is None:
         return None
@@ -184,6 +194,7 @@ def _parse_fx_pair(raw: object) -> Optional[Tuple[str, str]]:
     return m.group(1), m.group(2)
 
 
+# 从外汇行情行中提取美元基准汇率。
 def _collect_usd_rates_from_rows(rows: List[dict]) -> Dict[str, float]:
     rates: Dict[str, float] = {}
     for row in rows:
@@ -206,6 +217,7 @@ def _collect_usd_rates_from_rows(rows: List[dict]) -> Dict[str, float]:
     return rates
 
 
+# 读取所有订阅标的并去重后返回基础元数据。
 def get_unique_instruments_from_subscriptions() -> List[Tuple[str, str, str, str, Optional[str], Optional[str]]]:
     from market.models import UserInstrumentSubscription
 
@@ -237,6 +249,7 @@ def get_unique_instruments_from_subscriptions() -> List[Tuple[str, str, str, str
     return out
 
 
+# 拉取或推导美元对主流币种的汇率表。
 def pull_usd_exchange_rates(seed_rows: Optional[List[dict]] = None) -> Dict[str, float]:
     if _use_fake_provider():
         return dict(FAKE_USD_RATES)
@@ -262,6 +275,7 @@ def pull_usd_exchange_rates(seed_rows: Optional[List[dict]] = None) -> Dict[str,
     rates["USD"] = 1.0
     return rates
 
+# 拉取单个标的的最新行情，用于手动添加后的即时补齐。
 def pull_single_instrument_quote(symbol: str, short_code: str, name: str, market: str) -> Optional[dict]:
     """处理用户手动添加新代码时的突发查询"""
     if _use_fake_provider():
@@ -288,6 +302,7 @@ def pull_single_instrument_quote(symbol: str, short_code: str, name: str, market
 
 
 # 配合你现有的数据库，保留批量入口
+# 按市场批量拉取当前订阅标的的行情快照。
 def pull_watchlist_quotes(
     now_utc: Optional[datetime] = None,
     force_fetch_all_markets: bool = False,
