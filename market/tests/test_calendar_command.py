@@ -32,6 +32,7 @@ class _FakeMcal:
 class BuildMarketCalendarCsvCommandTests(SimpleTestCase):
     @patch("market.management.commands.build_market_calendar_csv.mcal", new=_FakeMcal())
     def test_build_market_calendar_csv_writes_expected_file(self):
+        """验证build 市场 日历 csv 会写出预期文件。"""
         with tempfile.TemporaryDirectory() as tmp_dir:
             call_command(
                 "build_market_calendar_csv",

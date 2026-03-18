@@ -46,7 +46,7 @@ class AccountSerializer(serializers.ModelSerializer):
 
         return attrs
 
-# 交易记录序列化器
+# ed 交易记录序列化器
 class TransactionSerializer(serializers.ModelSerializer):
     # 序列化返回给前端
     account_name = serializers.CharField(source="account.name", read_only=True)
@@ -113,7 +113,7 @@ class TransactionSerializer(serializers.ModelSerializer):
 
         return attrs
 
-
+# 删除交易记录序列化器
 class TransactionDeleteQuerySerializer(serializers.Serializer):
     id = serializers.CharField(required=False, allow_blank=True)
     source = serializers.CharField(required=False, allow_blank=True)

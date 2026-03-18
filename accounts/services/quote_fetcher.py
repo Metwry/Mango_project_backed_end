@@ -17,11 +17,8 @@ from .quote_providers import (
     MARKET_US,
     _safe_float,
     _strip_symbol_suffix,
-    _to_billion_amount,
     fetch_crypto_quotes_binance,
-    fetch_fx_quotes_sina,
     fetch_fx_quotes_with_fallback,
-    fetch_fx_quotes_yfinance,
     fetch_stocks_sina,
     should_fetch_market,
 )
@@ -69,11 +66,20 @@ def _fake_bucket(now_utc: datetime) -> int:
 
 
 # 从外汇代码中解析基础币种和计价币种。
-def _fx_pair_from_code(raw: str) -> tuple[str, str] | None:
-    s = str(raw or "").strip().upper()
-    if s.endswith(".FX"):
-        s = s[:-3]
-    m = re.fullmatch(r"([A-Z]{3})[/_-]?([A-Z]{3})", s)
+def _parse_fx_pair(raw: object) -> Optional[Tuple[str, str]]:
+    if raw is None:
+        return None
+
+    code = str(raw).strip().upper()
+    if not code:
+        return None
+
+    if "." in code:
+        left, suffix = code.rsplit(".", 1)
+        if suffix.isalpha():
+            code = left
+
+    m = re.fullmatch(r"([A-Z]{3})[/_-]?([A-Z]{3})", code)
     if not m:
         return None
     return m.group(1), m.group(2)
@@ -81,7 +87,7 @@ def _fx_pair_from_code(raw: str) -> tuple[str, str] | None:
 
 # 为外汇短代码生成假行情价格。
 def _fake_fx_price(short_code: str) -> float:
-    pair = _fx_pair_from_code(short_code)
+    pair = _parse_fx_pair(short_code)
     if not pair:
         return 1.0
     base, quote = pair
@@ -175,25 +181,6 @@ def _pull_watchlist_quotes_fake(
     return out
 
 
-# 从行情代码中解析标准化外汇货币对。
-def _parse_fx_pair(raw: object) -> Optional[Tuple[str, str]]:
-    if raw is None:
-        return None
-    code = str(raw).strip().upper()
-    if not code:
-        return None
-
-    if "." in code:
-        left, suffix = code.rsplit(".", 1)
-        if suffix.isalpha():
-            code = left
-
-    m = re.fullmatch(r"([A-Z]{3})[/_-]?([A-Z]{3})", code)
-    if not m:
-        return None
-    return m.group(1), m.group(2)
-
-
 # 从外汇行情行中提取美元基准汇率。
 def _collect_usd_rates_from_rows(rows: List[dict]) -> Dict[str, float]:
     rates: Dict[str, float] = {}
@@ -275,6 +262,16 @@ def pull_usd_exchange_rates(seed_rows: Optional[List[dict]] = None) -> Dict[str,
     rates["USD"] = 1.0
     return rates
 
+
+def _fetch_market_quotes(market: str, items: List[Tuple[str, str, str]]):
+    if market in (MARKET_CN, MARKET_HK, MARKET_US):
+        return fetch_stocks_sina(market, items)
+    if market == MARKET_CRYPTO:
+        return fetch_crypto_quotes_binance(items)
+    if market == MARKET_FX:
+        return fetch_fx_quotes_with_fallback(items)
+    return []
+
 # 拉取单个标的的最新行情，用于手动添加后的即时补齐。
 def pull_single_instrument_quote(symbol: str, short_code: str, name: str, market: str) -> Optional[dict]:
     """处理用户手动添加新代码时的突发查询"""
@@ -289,13 +286,8 @@ def pull_single_instrument_quote(symbol: str, short_code: str, name: str, market
         )
 
     item = [(symbol, short_code, name)]
-    if market in (MARKET_CN, MARKET_HK, MARKET_US):
-        quotes = fetch_stocks_sina(market, item)
-    elif market == MARKET_CRYPTO:
-        quotes = fetch_crypto_quotes_binance(item)
-    elif market == MARKET_FX:
-        quotes = fetch_fx_quotes_with_fallback(item)  # 使用容灾包装函数
-    else:
+    quotes = _fetch_market_quotes(market, item)
+    if not quotes:
         return None
 
     return asdict(quotes[0]) if quotes else None
@@ -342,13 +334,7 @@ def pull_watchlist_quotes(
             logger.warning("休市跳过行情拉取 market=%s 当前UTC时间=%s", market, now_utc.isoformat())
             continue
 
-        if market in (MARKET_CN, MARKET_HK, MARKET_US):
-            quotes = fetch_stocks_sina(market, items)
-        elif market == MARKET_CRYPTO:
-            quotes = fetch_crypto_quotes_binance(items)
-        elif market == MARKET_FX:
-            quotes = fetch_fx_quotes_with_fallback(items)  # 使用容灾包装函数
-
+        quotes = _fetch_market_quotes(market, items)
         out[market] = [asdict(q) for q in quotes]
 
     return out

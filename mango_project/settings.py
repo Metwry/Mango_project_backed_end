@@ -209,7 +209,7 @@ CELERY_ENABLE_UTC = True
 
 CELERY_BEAT_SCHEDULE = {
     "pull-watchlist-quotes-every-5-minutes": {
-        "task": "accounts.tasks.task_pull_watchlist_quotes",
+        "task": "market.tasks.task_pull_watchlist_quotes",
         "schedule": _schedule_with_test_seconds(
             crontab(minute="*/5"),
             MARKET_SYNC_TEST_EVERY_SECONDS,
@@ -263,7 +263,7 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 CELERY_TASK_ROUTES = {
-    "accounts.tasks.task_pull_watchlist_quotes": {"queue": "market_sync"},
+    "market.tasks.task_pull_watchlist_quotes": {"queue": "market_sync"},
     "snapshot.tasks.task_capture_m15_snapshots": {"queue": "snapshot_capture"},
     "snapshot.tasks.task_aggregate_h4_snapshots": {"queue": "snapshot_aggregate"},
     "snapshot.tasks.task_aggregate_d1_snapshots": {"queue": "snapshot_aggregate"},

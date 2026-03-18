@@ -3,7 +3,8 @@ param(
     [string]$EnvName = "Back_end_project",
     [string[]]$Targets = @("all"),
     [switch]$WithBeat,
-    [string]$Pool = "solo",
+    [string]$Pool = "threads",
+    [int]$Concurrency = 4,
     [string]$LogDir = "tmp_celery_logs",
     [string]$StateDir = "tmp_celery_state",
     [switch]$FollowLogs,
@@ -130,10 +131,10 @@ $targetWorkers = Normalize-Targets $Targets
 $pythonPath = Resolve-CondaPython $EnvName
 
 $commands = @{
-    "market_sync" = @("-A", "mango_project", "worker", "-n", "market_sync@%h", "-Q", "market_sync", "-l", "info", "-P", $Pool)
-    "snapshot_capture" = @("-A", "mango_project", "worker", "-n", "snapshot_capture@%h", "-Q", "snapshot_capture", "-l", "info", "-P", $Pool)
-    "snapshot_aggregate" = @("-A", "mango_project", "worker", "-n", "snapshot_aggregate@%h", "-Q", "snapshot_aggregate", "-l", "info", "-P", $Pool)
-    "snapshot_cleanup" = @("-A", "mango_project", "worker", "-n", "snapshot_cleanup@%h", "-Q", "snapshot_cleanup", "-l", "info", "-P", $Pool)
+    "market_sync" = @("-A", "mango_project", "worker", "-n", "market_sync@%h", "-Q", "market_sync", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
+    "snapshot_capture" = @("-A", "mango_project", "worker", "-n", "snapshot_capture@%h", "-Q", "snapshot_capture", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
+    "snapshot_aggregate" = @("-A", "mango_project", "worker", "-n", "snapshot_aggregate@%h", "-Q", "snapshot_aggregate", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
+    "snapshot_cleanup" = @("-A", "mango_project", "worker", "-n", "snapshot_cleanup@%h", "-Q", "snapshot_cleanup", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
 }
 
 $processEnv = @{}

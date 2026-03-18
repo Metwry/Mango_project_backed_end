@@ -6,7 +6,8 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_NAME="Back_end_project"
 TARGETS="all"
 WITH_BEAT="0"
-POOL="solo"
+POOL="threads"
+CONCURRENCY="4"
 LOG_DIR="tmp_celery_logs"
 STATE_DIR="tmp_celery_state"
 FOLLOW_LOGS="0"
@@ -39,6 +40,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --pool)
       POOL="$2"
+      shift 2
+      ;;
+    --concurrency)
+      CONCURRENCY="$2"
       shift 2
       ;;
     --log-dir)
@@ -155,10 +160,10 @@ if [[ ! -x "${PYTHON_BIN}" ]]; then
 fi
 
 declare -A COMMANDS=(
-  ["market_sync"]="-A mango_project worker -n market_sync@%h -Q market_sync -l info -P ${POOL}"
-  ["snapshot_capture"]="-A mango_project worker -n snapshot_capture@%h -Q snapshot_capture -l info -P ${POOL}"
-  ["snapshot_aggregate"]="-A mango_project worker -n snapshot_aggregate@%h -Q snapshot_aggregate -l info -P ${POOL}"
-  ["snapshot_cleanup"]="-A mango_project worker -n snapshot_cleanup@%h -Q snapshot_cleanup -l info -P ${POOL}"
+  ["market_sync"]="-A mango_project worker -n market_sync@%h -Q market_sync -l info -P ${POOL} --concurrency ${CONCURRENCY}"
+  ["snapshot_capture"]="-A mango_project worker -n snapshot_capture@%h -Q snapshot_capture -l info -P ${POOL} --concurrency ${CONCURRENCY}"
+  ["snapshot_aggregate"]="-A mango_project worker -n snapshot_aggregate@%h -Q snapshot_aggregate -l info -P ${POOL} --concurrency ${CONCURRENCY}"
+  ["snapshot_cleanup"]="-A mango_project worker -n snapshot_cleanup@%h -Q snapshot_cleanup -l info -P ${POOL} --concurrency ${CONCURRENCY}"
 )
 
 start_proc() {

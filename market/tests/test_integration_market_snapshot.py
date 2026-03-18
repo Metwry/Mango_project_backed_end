@@ -49,6 +49,7 @@ class MarketSnapshotIntegrationTests(TestCase):
         mock_pull_quotes,
         _mock_need_refresh_fx,
     ):
+        """验证sync watchlist snapshot 会重估投资账户余额。"""
         investment_account = Accounts.objects.create(
             user=self.user,
             name="投资账户",
@@ -114,6 +115,7 @@ class MarketSnapshotIntegrationTests(TestCase):
         mock_pull_quotes,
         _mock_need_refresh_fx,
     ):
+        """验证sync then capture m15 会写入持仓和账户快照。"""
         investment_account = Accounts.objects.create(
             user=self.user,
             name="投资账户",
@@ -187,6 +189,7 @@ class MarketSnapshotIntegrationTests(TestCase):
         self.assertEqual(acc.fx_rate_to_usd, Decimal("1.0000000000"))
 
     def test_capture_marks_quote_missing_for_investment_position_without_price(self):
+        """验证capture 会将无价格的投资持仓标记为缺少行情。"""
         investment_account = Accounts.objects.create(
             user=self.user,
             name="投资账户",
@@ -239,6 +242,7 @@ class MarketSnapshotIntegrationTests(TestCase):
         self.assertEqual(acc.balance_usd, Decimal("0.000000"))
 
     def test_capture_converts_cash_account_balance_to_usd(self):
+        """验证capture 会将现金账户余额转换为 USD。"""
         cash_account = Accounts.objects.create(
             user=self.user,
             name="招商银行",

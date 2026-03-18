@@ -19,6 +19,7 @@ class FakeQuoteProviderTests(SimpleTestCase):
         ],
     )
     def test_pull_watchlist_quotes_fake_provider_no_external_api(self, _mock_rows):
+        """验证pull 自选 quotes 假数据 提供方 不会访问外部 API。"""
         data = pull_watchlist_quotes(
             now_utc=datetime(2026, 3, 4, 12, 0, tzinfo=timezone.utc),
             force_fetch_all_markets=True,
@@ -29,12 +30,14 @@ class FakeQuoteProviderTests(SimpleTestCase):
         self.assertIsInstance(data["US"][0]["price"], float)
 
     def test_pull_usd_exchange_rates_fake_provider(self):
+        """验证pull usd exchange rates 假数据 提供方。"""
         rates = pull_usd_exchange_rates()
         self.assertEqual(rates["USD"], 1.0)
         self.assertIn("CNY", rates)
         self.assertIn("EUR", rates)
 
     def test_pull_single_instrument_quote_fake_provider(self):
+        """验证pull 单条 instrument 行情 假数据 提供方。"""
         row = pull_single_instrument_quote("AAPL.US", "AAPL", "Apple Inc.", "US")
         self.assertIsNotNone(row)
         self.assertIsInstance(row["price"], float)
