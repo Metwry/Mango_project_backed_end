@@ -32,6 +32,7 @@ class SnapshotSyncServiceTests(SimpleTestCase):
         mock_pull_quotes,
         _mock_need_fx_refresh,
     ):
+        """验证force init pull 在 bootstrap 但未到期时执行强制初始化拉取。"""
         mock_sub_meta.return_value = {
             "US": {
                 "AAPL": {
@@ -75,6 +76,7 @@ class SnapshotSyncServiceTests(SimpleTestCase):
         mock_pull_quotes,
         _mock_need_fx_refresh,
     ):
+        """验证no due and no bootstrap 在未到期且未 bootstrap 时保留上次 pulled at。"""
         old_pulled_at = "2026-03-04T12:00:00+08:00"
         cache.set(
             WATCHLIST_QUOTES_KEY,

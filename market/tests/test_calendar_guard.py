@@ -53,6 +53,7 @@ class CalendarGuardTests(SimpleTestCase):
                 fp.write(",".join(str(row.get(h, "")) for h in headers) + "\n")
 
     def test_non_trading_day_is_blocked(self):
+        """验证non trading 天 会被阻止。"""
         self._write_calendar(
             "US",
             2026,
@@ -86,6 +87,7 @@ class CalendarGuardTests(SimpleTestCase):
         self.assertEqual(decision.reason, "non_trading_day")
 
     def test_cn_pre_open_one_shot_only_once(self):
+        """验证cn pre open 一个 shot 只会执行一次。"""
         self._write_calendar(
             "CN",
             2026,
@@ -127,6 +129,7 @@ class CalendarGuardTests(SimpleTestCase):
             self.assertFalse(second.should_pull)
 
     def test_fx_uses_pulled_at_instead_of_updated_at(self):
+        """验证fx 使用 pulled at 而不是 updated at。"""
         now_utc = datetime(2026, 3, 2, 10, 30, tzinfo=timezone.utc)  # Monday
         cache.set(
             f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}FX",
@@ -146,6 +149,7 @@ class CalendarGuardTests(SimpleTestCase):
         self.assertTrue(decision.should_pull)
 
     def test_fx_with_null_pulled_at_treats_as_never_pulled(self):
+        """验证fx with null pulled at 会视为从未拉取过。"""
         now_utc = datetime(2026, 3, 2, 10, 30, tzinfo=timezone.utc)  # Monday
         cache.set(
             f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}FX",

@@ -25,7 +25,7 @@ class Currency(models.TextChoices):
     EUR = "EUR", "欧元"
     HKD = "HKD","港币"
 
-
+# ed 账户模型
 class Accounts(models.Model):
     """
     用户账户模型。
@@ -107,7 +107,7 @@ class Accounts(models.Model):
     def __str__(self) -> str:
         return f"{self.user_id}-{self.name}({self.currency})"
 
-
+# ed 交易记录模型
 class Transaction(models.Model):
     """
     账户交易流水模型。

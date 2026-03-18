@@ -77,7 +77,7 @@ celery -A mango_project beat -l info
 
 ### 7. 定时任务
 
-- 自选行情补拉：`accounts.tasks.task_pull_watchlist_quotes`
+- 自选行情补拉：`market.tasks.task_pull_watchlist_quotes`
 - 15 分钟快照采集：`snapshot.tasks.task_capture_m15_snapshots`
 - H4 / D1 / MON1 聚合：`snapshot.tasks.task_aggregate_*`
 - 历史快照清理：`snapshot.tasks.task_cleanup_snapshot_history`

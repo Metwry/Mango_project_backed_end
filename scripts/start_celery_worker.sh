@@ -5,7 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CONDA_BASE="${CONDA_BASE:-/opt/anaconda3}"
 ENV_NAME="${ENV_NAME:-Back_end_project}"
-CELERY_POOL="${CELERY_POOL:-solo}"
+CELERY_POOL="${CELERY_POOL:-threads}"
+CELERY_CONCURRENCY="${CELERY_CONCURRENCY:-4}"
 
 if [[ ! -f "${CONDA_BASE}/etc/profile.d/conda.sh" ]]; then
   echo "conda.sh not found under ${CONDA_BASE}/etc/profile.d/conda.sh" >&2
@@ -23,4 +24,5 @@ exec python -m celery -A mango_project worker \
   -n mango_worker@%h \
   -Q market_sync,snapshot_capture,snapshot_aggregate,snapshot_cleanup \
   -l info \
-  -P "${CELERY_POOL}"
+  -P "${CELERY_POOL}" \
+  --concurrency "${CELERY_CONCURRENCY}"

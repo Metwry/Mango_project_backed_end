@@ -111,6 +111,7 @@ class SnapshotQueryApiFieldTests(APITestCase):
         )
 
     def test_accounts_query_returns_balance_usd_without_balance_native(self):
+        """验证账户 查询 返回 余额 usd 且不返回 余额 native。"""
         params = {
             "level": SnapshotLevel.M15,
             "start_time": self.snapshot_time.isoformat(),
@@ -127,6 +128,7 @@ class SnapshotQueryApiFieldTests(APITestCase):
         self.assertEqual(series["balance_usd"][0], "1200")
 
     def test_positions_query_excludes_unneeded_fields(self):
+        """验证positions 查询 不会返回不需要的字段。"""
         params = {
             "level": SnapshotLevel.M15,
             "start_time": self.snapshot_time.isoformat(),
@@ -147,6 +149,7 @@ class SnapshotQueryApiFieldTests(APITestCase):
         self.assertEqual(series["market_value"][0], "600")
 
     def test_accounts_query_can_filter_single_account(self):
+        """验证账户 查询 支持按单个账户过滤。"""
         another_account = Accounts.objects.create(
             user=self.user,
             name="现金账户",
@@ -180,6 +183,7 @@ class SnapshotQueryApiFieldTests(APITestCase):
         self.assertEqual(response.data["series"][0]["account_id"], another_account.id)
 
     def test_positions_query_can_filter_single_instrument(self):
+        """验证positions 查询 支持按单个标的过滤。"""
         another_instrument = Instrument.objects.create(
             symbol="TSLA.US",
             short_code="TSLA",
@@ -219,6 +223,7 @@ class SnapshotQueryApiFieldTests(APITestCase):
         self.assertEqual(response.data["series"][0]["instrument_id"], another_instrument.id)
 
     def test_m15_query_rejects_range_longer_than_one_day(self):
+        """验证m15 查询 会拒绝超过一天的查询范围。"""
         response = self.client.get(
             self.account_endpoint,
             {

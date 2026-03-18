@@ -42,6 +42,7 @@ class MarketBasicApiTests(APITestCase):
 
     @patch("market.services.quote_snapshot_service.pull_single_instrument_quote")
     def test_watchlist_add_and_snapshot_query(self, mock_pull):
+        """验证自选 验证添加后可查询快照。"""
         mock_pull.return_value = {
             "short_code": "AAPL",
             "name": "Apple Inc.",
@@ -69,6 +70,7 @@ class MarketBasicApiTests(APITestCase):
         self.assertEqual(snapshot_resp.data["markets"][0]["quotes"][0]["logo_color"], None)
 
     def test_watchlist_add_rejects_index_instrument(self):
+        """验证自选 add 会拒绝指数标的。"""
         Instrument.objects.create(
             symbol="SPX.US",
             short_code="SPX",
@@ -101,6 +103,7 @@ class MarketBasicApiTests(APITestCase):
         },
     )
     def test_market_indices_endpoint_returns_payload(self, _mock_snapshot):
+        """验证市场 indices 返回预期负载。"""
         resp = self.client.get("/api/user/markets/indices/")
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
@@ -110,6 +113,7 @@ class MarketBasicApiTests(APITestCase):
 
     @override_settings(MARKET_QUOTE_PROVIDER="fake", MARKET_INDEX_PROVIDER="fake")
     def test_build_market_indices_snapshot_with_fake_provider(self):
+        """验证build 市场 indices 快照 在 假数据 提供方 下返回预期结果。"""
         Instrument.objects.create(
             symbol="SPX.US",
             short_code="SPX",
@@ -135,6 +139,7 @@ class MarketBasicApiTests(APITestCase):
         self.assertIsNotNone(payload["items"][0]["prev_close"])
 
     def test_latest_quotes_batch_reads_from_redis(self):
+        """验证latest quotes 批量 会从 Redis 读取数据。"""
         cache.set(
             WATCHLIST_QUOTES_KEY,
             {
@@ -167,6 +172,7 @@ class MarketBasicApiTests(APITestCase):
         )
 
     def test_market_search_returns_instrument_id(self):
+        """验证市场 搜索 返回 instrument id。"""
         resp = self.client.get("/api/user/markets/search/?q=AAPL")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn("results", resp.data)
@@ -174,6 +180,7 @@ class MarketBasicApiTests(APITestCase):
         self.assertIn("instrument_id", resp.data["results"][0])
 
     def test_market_search_blank_query_returns_empty_results(self):
+        """验证市场 搜索 空查询返回空结果。"""
         resp = self.client.get("/api/user/markets/search/?q=   ")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data, {"results": []})
@@ -205,6 +212,7 @@ class MarketComplexApiTests(APITestCase):
         )
 
     def test_watchlist_delete_keeps_subscription_when_position_source_exists(self):
+        """验证自选 删除 在持仓来源存在时保留订阅。"""
         UserInstrumentSubscription.objects.create(
             user=self.user,
             instrument=self.instrument,
@@ -220,6 +228,7 @@ class MarketComplexApiTests(APITestCase):
 
     @patch("market.services.quote_snapshot_service.pull_single_instrument_quote")
     def test_watchlist_delete_accepts_market_and_short_code(self, mock_pull):
+        """验证自选 删除 支持 市场 和 short code 删除。"""
         mock_pull.return_value = {
             "short_code": "AAPL",
             "name": "Apple Inc.",
@@ -239,6 +248,7 @@ class MarketComplexApiTests(APITestCase):
 
     @patch("market.services.quote_snapshot_service.pull_single_instrument_quote")
     def test_delete_to_orphan_then_add_uses_orphan_quote(self, mock_pull):
+        """验证删除 to orphan then 会复用孤儿行情。"""
         mock_pull.return_value = {
             "short_code": "AAPL",
             "name": "Apple Inc.",
@@ -261,6 +271,7 @@ class MarketComplexApiTests(APITestCase):
         mock_pull.assert_not_called()
 
     def test_fx_rates_base_conversion(self):
+        """验证fx rates 按基础币种完成转换。"""
         cache.set(
             USD_EXCHANGE_RATES_KEY,
             {
@@ -283,6 +294,7 @@ class MarketComplexApiTests(APITestCase):
 class MarketLogoSyncCommandTests(TestCase):
     @patch("market.management.commands.sync_logo_data.extract_logo_theme_color", return_value="#112233")
     def test_sync_logo_data_updates_us_hk_and_crypto_by_default(self, _mock_extract):
+        """验证同步 图标 数据 默认更新美股、港股和加密货币图标数据。"""
         us = Instrument.objects.create(
             symbol="AAPL.US",
             short_code="AAPL",
@@ -347,6 +359,7 @@ class MarketLogoSyncCommandTests(TestCase):
         self.assertIsNone(cn.logo_updated_at)
 
     def test_sync_logo_data_without_force_keeps_existing_logo(self):
+        """验证同步 图标 数据 在不强制更新时保留已有图标。"""
         fixed_time = timezone.now()
         inst = Instrument.objects.create(
             symbol="MSFT.US",
@@ -371,6 +384,7 @@ class MarketLogoSyncCommandTests(TestCase):
 
     @patch("market.management.commands.sync_logo_data.extract_logo_theme_color", return_value=None)
     def test_sync_logo_data_sets_logo_color_null_when_extract_failed(self, _mock_extract):
+        """验证同步 图标 数据 在提取失败时将 图标 color 置空。"""
         inst = Instrument.objects.create(
             symbol="SHOP.US",
             short_code="SHOP",
@@ -388,6 +402,7 @@ class MarketLogoSyncCommandTests(TestCase):
 
     @patch("market.management.commands.sync_logo_data.extract_logo_theme_color", return_value="#112233")
     def test_sync_logo_data_cn_uses_exchange_suffix(self, _mock_extract):
+        """验证同步 图标 数据 对 A 股使用交易所后缀。"""
         sh = Instrument.objects.create(
             symbol="600519.CN",
             short_code="600519",
@@ -436,6 +451,7 @@ class MarketLogoSyncCommandTests(TestCase):
 
 class MarketCoreIndexSyncCommandTests(TestCase):
     def test_sync_core_indices_creates_selected_market_indices(self):
+        """验证同步 核心 indices 创建指定市场指数。"""
         call_command("sync_core_indices", "--markets", "us", "hk", stdout=StringIO())
 
         symbols = set(

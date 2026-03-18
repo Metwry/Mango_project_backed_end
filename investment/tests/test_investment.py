@@ -90,6 +90,7 @@ class InvestmentBasicApiTests(APITestCase):
         )
 
     def test_buy_success_and_position_list_fields(self):
+        """验证买入 成功买入并返回持仓列表字段。"""
         buy_resp = self.client.post(
             self.buy_endpoint,
             {
@@ -119,6 +120,7 @@ class InvestmentBasicApiTests(APITestCase):
         )
 
     def test_buy_revalues_investment_account_using_cost_when_quote_missing(self):
+        """验证买入 revalues 投资 账户 在缺少行情时按成本重估。"""
         buy_resp = self.client.post(
             self.buy_endpoint,
             {
@@ -140,6 +142,7 @@ class InvestmentBasicApiTests(APITestCase):
         self.assertEqual(investment_account.balance, Decimal("140.00"))
 
     def test_buy_rejects_index_instrument(self):
+        """验证买入 会拒绝指数标的。"""
         index_instrument = Instrument.objects.create(
             symbol="SPX.US",
             short_code="SPX",
@@ -165,6 +168,7 @@ class InvestmentBasicApiTests(APITestCase):
         self.assertIn("指数暂不支持交易", str(resp.data))
 
     def test_sell_all_deletes_position_and_keeps_investment_account_active(self):
+        """验证卖出 全部 会删除持仓并保持投资账户处于激活状态。"""
         self.client.post(
             self.buy_endpoint,
             {
@@ -197,6 +201,7 @@ class InvestmentBasicApiTests(APITestCase):
         self.assertEqual(investment_account.balance, Decimal("0.00"))
 
     def test_buy_after_full_sell_reuses_same_investment_account(self):
+        """验证买入 after full 卖出 会复用同一个投资账户。"""
         first_buy_resp = self.client.post(
             self.buy_endpoint,
             {
@@ -251,6 +256,7 @@ class InvestmentBasicApiTests(APITestCase):
         self.assertEqual(reactivated.status, Accounts.Status.ACTIVE)
 
     def test_cannot_reverse_investment_generated_cash_transaction(self):
+        """验证cannot 撤销 投资 generated 现金 交易。"""
         buy_resp = self.client.post(
             self.buy_endpoint,
             {
@@ -273,6 +279,7 @@ class InvestmentBasicApiTests(APITestCase):
         self.assertEqual(Transaction.objects.filter(account=self.usd_account).count(), 1)
 
     def test_history_query_returns_read_only_investment_records(self):
+        """验证历史 查询 返回只读的投资记录。"""
         buy_resp = self.client.post(
             self.buy_endpoint,
             {
@@ -368,6 +375,7 @@ class InvestmentComplexApiTests(APITestCase):
         )
 
     def test_currency_change_revalues_investment_account(self):
+        """验证币种 变更 revalues 投资 账户。"""
         self.client.post(
             self.buy_endpoint,
             {
@@ -402,6 +410,7 @@ class InvestmentComplexApiTests(APITestCase):
         self.assertEqual(account.balance, Decimal("38.29"))
 
     def test_investment_account_only_currency_is_editable(self):
+        """验证投资 账户 只允许修改币种。"""
         self.client.post(
             self.buy_endpoint,
             {
@@ -502,6 +511,7 @@ class InvestmentConcurrencyApiTests(TransactionTestCase):
         return resp.status_code
 
     def test_concurrent_first_buy_only_one_investment_account(self):
+        """验证并发 首次 买入 仅 一个 投资 账户。"""
         gate = Barrier(2)
         with ThreadPoolExecutor(max_workers=2) as executor:
             futures = [executor.submit(self._buy_once, gate) for _ in range(2)]
@@ -518,6 +528,7 @@ class InvestmentConcurrencyApiTests(TransactionTestCase):
         )
 
     def test_concurrent_sell_last_position_keeps_state_consistent(self):
+        """验证并发 卖出 last 持仓 会保持状态一致。"""
         client = APIClient()
         client.force_authenticate(self.user)
         buy_resp = client.post(
