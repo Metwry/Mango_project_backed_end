@@ -39,7 +39,7 @@ class Instrument(models.Model):
         FX = "FX", _("外汇市场 (Forex)")
 
     # 系统内统一代码，全局唯一，例如 `AAPL.US`、`BTCUSDT.CRYPTO`。
-    symbol = models.CharField(max_length=50, unique=True, db_index=True, verbose_name="标准代码")
+    symbol = models.CharField(max_length=50, unique=True, verbose_name="标准代码")
     # 原始短代码，通常用于行情源请求或展示，例如 `AAPL`、`BTCUSDT`。
     short_code = models.CharField(max_length=20, db_index=True, verbose_name="原始代码")
     # 标的名称，支持搜索与列表展示。
@@ -77,7 +77,6 @@ class Instrument(models.Model):
     is_active = models.BooleanField(
         default=True,
         verbose_name="是否可交易",
-        help_text="用于标记退市股票或下架品种",
     )
 
     # 数据创建时间。
@@ -93,11 +92,6 @@ class Instrument(models.Model):
         verbose_name_plural = "交易品种列表"
         # 默认先按资产大类再按统一代码排序。
         ordering = ["asset_class", "symbol"]
-        # 优化搜索接口中短代码 + 名称组合检索。
-        indexes = [
-            models.Index(fields=["short_code", "name"], name="market_inst_short_c_cb36ea_idx"),
-        ]
-
     # 返回适合调试和管理后台展示的标的描述。
     def __str__(self):
         return f"{self.symbol} - {self.name}"
@@ -114,7 +108,7 @@ class UserInstrumentSubscription(models.Model):
     约束说明：
     - `UniqueConstraint(user, instrument)`：同一用户对同一标的只有一条订阅记录。
     - `sub_at_least_one_source_true`：`from_position` 和 `from_watchlist` 至少一个为真，
-      避免出现“没有任何来源却仍保留订阅”的脏数据。
+    避免出现“没有任何来源却仍保留订阅”的脏数据。
     - 索引分别优化按标的统计订阅、按用户查看最近变更订阅。
     """
 

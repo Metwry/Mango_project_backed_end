@@ -18,10 +18,10 @@ from shared.utils import normalize_code
 
 # 将指定标的加入当前用户自选，并确保行情缓存可用。
 def add_watchlist_symbol(*, user, symbol: str) -> dict:
-    normalized_symbol = normalize_code(symbol)
+    normalized_symbol = str(symbol or "").strip()
     instrument = (
         Instrument.objects
-        .filter(symbol__iexact=normalized_symbol, is_active=True)
+        .filter(symbol=normalized_symbol, is_active=True)
         .only("id", "symbol", "short_code", "name", "market", "asset_class", "logo_url", "logo_color")
         .first()
     )
@@ -73,7 +73,7 @@ def _find_watchlist_subscriptions(*, user, symbol: str, market: str, short_code:
         .select_related("instrument")
     )
     if symbol:
-        qs = qs.filter(instrument__symbol__iexact=symbol)
+        qs = qs.filter(instrument__symbol=symbol)
     else:
         qs = qs.filter(
             instrument__market__iexact=market,
@@ -88,7 +88,7 @@ def _find_watchlist_subscriptions(*, user, symbol: str, market: str, short_code:
 
 # 将指定标的从当前用户自选移除，并在无人订阅时清理缓存行情。
 def delete_watchlist_symbol(*, user, symbol: str = "", market: str = "", short_code: str = "") -> dict:
-    symbol = normalize_code(symbol)
+    symbol = str(symbol or "").strip()
     market = normalize_code(market)
     short_code = normalize_code(short_code)
     subscriptions = _find_watchlist_subscriptions(user=user, symbol=symbol, market=market, short_code=short_code)

@@ -64,9 +64,9 @@ class MarketLatestQuoteBatchSerializer(serializers.Serializer):
 class MarketWatchlistAddSerializer(serializers.Serializer):
     symbol = serializers.CharField()
 
-    # 校验并标准化加入自选的完整代码。
+    # 校验加入自选的完整代码。
     def validate_symbol(self, value):
-        symbol = normalize_code(value)
+        symbol = str(value or "").strip()
         if not symbol:
             raise serializers.ValidationError("symbol 不能为空")
         return symbol
@@ -77,9 +77,9 @@ class MarketWatchlistDeleteSerializer(serializers.Serializer):
     market = serializers.CharField(required=False, allow_blank=True)
     short_code = serializers.CharField(required=False, allow_blank=True)
 
-    # 校验删除自选所需的定位参数并统一编码格式。
+    # 校验删除自选所需的定位参数。
     def validate(self, attrs):
-        symbol = normalize_code(attrs.get("symbol"))
+        symbol = str(attrs.get("symbol") or "").strip()
         market = normalize_code(attrs.get("market"))
         short_code = normalize_code(attrs.get("short_code"))
 
