@@ -30,11 +30,6 @@ def build_user_markets_snapshot(user) -> dict:
     payload = get_snapshot_payload()
     data = payload.get("data")
     market_data = data if isinstance(data, dict) else {}
-    stale_markets = {
-        str(m).strip().upper()
-        for m in (payload.get("stale_markets") or [])
-        if isinstance(m, str)
-    }
     watchlist_codes = user_watchlist_codes_by_market(user)
 
     markets = []
@@ -45,7 +40,6 @@ def build_user_markets_snapshot(user) -> dict:
         markets.append(
             {
                 "market": market,
-                "stale": market in stale_markets,
                 "quotes": quotes,
             }
         )

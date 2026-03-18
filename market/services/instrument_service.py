@@ -13,7 +13,6 @@ def search_instruments(*, query: str, query_upper: str, limit: int):
         .filter(is_active=True)
         .filter(
             Q(short_code__icontains=query_upper)
-            | Q(symbol__icontains=query_upper)
             | Q(name__icontains=query)
         )
         .annotate(
