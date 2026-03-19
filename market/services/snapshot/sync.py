@@ -5,13 +5,9 @@ from typing import Dict, List, Set
 from django.core.cache import cache
 from django.utils import timezone
 
-from accounts.services import (
-    USD_MAINSTREAM_CURRENCIES,
-    pull_usd_exchange_rates,
-    pull_watchlist_quotes,
-)
 from common.logging_utils import log_info
-from common.utils import normalize_code, resolve_short_code, safe_payload_data
+from common.utils.cache_utils import safe_payload_data
+from common.utils.code_utils import normalize_code, resolve_short_code
 
 from .cache_keys import (
     FX_REFRESH_INTERVAL,
@@ -20,10 +16,22 @@ from .cache_keys import (
     WATCHLIST_QUOTES_KEY,
     WATCHLIST_QUOTES_MARKET_KEY_PREFIX,
 )
-from .calendar_guard_service import resolve_due_markets
-from .subscription_query_service import global_subscription_meta_by_market
+from .calendar_guard import resolve_due_markets
+from ..subscription.service import global_subscription_meta_by_market
 
 logger = logging.getLogger(__name__)
+
+
+# 代理批量行情拉取，兼容测试 patch 和延迟导入。
+def pull_watchlist_quotes(*args, **kwargs):
+    from accounts.services.quote_fetcher import pull_watchlist_quotes as impl
+    return impl(*args, **kwargs)
+
+
+# 代理美元汇率拉取，兼容测试 patch 和延迟导入。
+def pull_usd_exchange_rates(*args, **kwargs):
+    from accounts.services.quote_fetcher import pull_usd_exchange_rates as impl
+    return impl(*args, **kwargs)
 
 # 根据订阅代码集合过滤行情快照，只保留实际仍被订阅的标的。
 def _filter_snapshot_by_subscription(
@@ -165,6 +173,8 @@ def _parse_iso_datetime(raw: object) -> datetime | None:
 
 # 判断当前是否需要刷新美元基准汇率快照。
 def _need_refresh_fx_rates(now_local: datetime) -> bool:
+    from accounts.services.quote_fetcher import USD_MAINSTREAM_CURRENCIES
+
     payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}
     if not isinstance(payload, dict):
         return True

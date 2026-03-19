@@ -10,9 +10,9 @@ from django.test import TestCase, override_settings
 from accounts.models import Accounts, Currency
 from investment.models import Position
 from market.models import Instrument, UserInstrumentSubscription
-from market.services.cache_keys import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
-from market.services.calendar_guard_service import GuardDecision
-from market.services.snapshot_sync_service import sync_watchlist_snapshot
+from market.services.snapshot.cache_keys import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.snapshot.calendar_guard import GuardDecision
+from market.services.snapshot.sync import sync_watchlist_snapshot
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
 from snapshot.services.snapshot_service import capture_snapshots
 
@@ -40,9 +40,9 @@ class MarketSnapshotIntegrationTests(TestCase):
             is_active=True,
         )
 
-    @patch("market.services.snapshot_sync_service._need_refresh_fx_rates", return_value=False)
-    @patch("market.services.snapshot_sync_service.pull_watchlist_quotes")
-    @patch("market.services.snapshot_sync_service.resolve_due_markets")
+    @patch("market.services.snapshot.sync._need_refresh_fx_rates", return_value=False)
+    @patch("market.services.snapshot.sync.pull_watchlist_quotes")
+    @patch("market.services.snapshot.sync.resolve_due_markets")
     def test_sync_watchlist_snapshot_revalues_investment_account_balance(
         self,
         mock_resolve_due,
@@ -106,9 +106,9 @@ class MarketSnapshotIntegrationTests(TestCase):
         investment_account.refresh_from_db()
         self.assertEqual(investment_account.balance, Decimal("200.00"))
 
-    @patch("market.services.snapshot_sync_service._need_refresh_fx_rates", return_value=False)
-    @patch("market.services.snapshot_sync_service.pull_watchlist_quotes")
-    @patch("market.services.snapshot_sync_service.resolve_due_markets")
+    @patch("market.services.snapshot.sync._need_refresh_fx_rates", return_value=False)
+    @patch("market.services.snapshot.sync.pull_watchlist_quotes")
+    @patch("market.services.snapshot.sync.resolve_due_markets")
     def test_sync_then_capture_m15_writes_position_and_account_snapshots(
         self,
         mock_resolve_due,

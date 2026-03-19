@@ -1,24 +1,24 @@
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from common.utils.code_utils import normalize_code
 
 from .serializers import (
     InstrumentSearchItemSerializer,
     MarketInstrumentSearchQuerySerializer,
     MarketLatestQuoteBatchSerializer,
-    MarketWatchlistAddSerializer,
-    MarketWatchlistDeleteSerializer,
 )
-from .services import (
+from .services.api.service import (
     add_watchlist_symbol,
     build_latest_quotes,
-    build_market_indices_snapshot,
     build_user_markets_snapshot,
     delete_watchlist_symbol,
-    get_fx_rates,
     search_instruments,
 )
+from .services.index.quote import build_market_indices_snapshot
+from .services.snapshot.fx_rate import get_fx_rates
 
 class MarketsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -86,11 +86,12 @@ class MarketWatchlistAddView(APIView):
 
     # ed 将指定标的加入当前用户自选。
     def post(self, request, *args, **kwargs):
-        serializer = MarketWatchlistAddSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        symbol = str(request.data.get("symbol") or "").strip()
+        if not symbol:
+            raise ValidationError({"symbol": "symbol 不能为空"})
         result = add_watchlist_symbol(
             user=request.user,
-            symbol=serializer.validated_data["symbol"],
+            symbol=symbol,
         )
 
         status_code = status.HTTP_201_CREATED if result.get("created") else status.HTTP_200_OK
@@ -98,11 +99,18 @@ class MarketWatchlistAddView(APIView):
 
     # ed 将指定标的从当前用户自选移除，并同步更新缓存行情。
     def delete(self, request, *args, **kwargs):
-        serializer = MarketWatchlistDeleteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        market = normalize_code(request.data.get("market"))
+        short_code = normalize_code(request.data.get("short_code"))
+        errors = {}
+        if not market:
+            errors["market"] = "market 不能为空"
+        if not short_code:
+            errors["short_code"] = "short_code 不能为空"
+        if errors:
+            raise ValidationError(errors)
         result = delete_watchlist_symbol(
             user=request.user,
-            market=serializer.validated_data["market"],
-            short_code=serializer.validated_data["short_code"],
+            market=market,
+            short_code=short_code,
         )
         return Response(result, status=status.HTTP_200_OK)

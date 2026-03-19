@@ -8,11 +8,11 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from accounts.models import Accounts, Transaction
 from accounts.services.transaction_service import create_transaction_for_locked_account
 from market.models import Instrument
-from market.services.quote_snapshot_service import ensure_instrument_quote
-from market.services.subscription_service import SOURCE_POSITION, set_user_instrument_source
-from common.constants import market_currency
+from market.services.snapshot.quote_store import ensure_instrument_quote
+from market.services.subscription.service import SOURCE_POSITION, set_user_instrument_source
+from common.constants.market import market_currency
 from common.exceptions import BusinessConflictError
-from common.utils import quantize_decimal, trim_decimal, trim_decimal_str
+from common.utils.decimal_utils import quantize_decimal, trim_decimal, trim_decimal_str
 
 from ..models import InvestmentRecord, Position
 from .account_service import sync_investment_account_for_user

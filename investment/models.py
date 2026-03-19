@@ -6,7 +6,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
-from common.db import check_constraint
+from common.db.constraints import check_constraint
 
 
 class InvestmentRecord(models.Model):

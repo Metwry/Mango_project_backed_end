@@ -4,7 +4,7 @@ from django.db import models
 from django.db.models import Q
 
 from accounts.models import Currency
-from common.db import check_constraint
+from common.db.constraints import check_constraint
 
 
 class SnapshotDataStatus(models.TextChoices):

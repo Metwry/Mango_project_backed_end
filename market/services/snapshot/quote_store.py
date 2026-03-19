@@ -2,8 +2,9 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
-from accounts.services import pull_single_instrument_quote
-from common.utils import normalize_code, resolve_short_code, safe_payload_data, to_decimal, trim_decimal_str
+from common.utils.cache_utils import safe_payload_data
+from common.utils.code_utils import normalize_code, resolve_short_code
+from common.utils.decimal_utils import to_decimal, trim_decimal_str
 
 from .cache_keys import (
     DEFAULT_WATCHLIST_ORPHAN_TTL,
@@ -20,6 +21,12 @@ def safe_price_str(raw: object) -> str | None:
     if value is None:
         return None
     return trim_decimal_str(value)
+
+
+# 代理单标的行情拉取，兼容测试 patch 和延迟导入。
+def pull_single_instrument_quote(*args, **kwargs):
+    from accounts.services.quote_fetcher import pull_single_instrument_quote as impl
+    return impl(*args, **kwargs)
 
 
 # 构造孤儿行情缓存键。

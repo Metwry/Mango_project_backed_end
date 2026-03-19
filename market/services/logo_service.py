@@ -15,7 +15,7 @@ import requests
 from PIL import Image
 
 from market.models import Instrument
-from common.utils import normalize_code
+from common.utils.code_utils import normalize_code
 
 
 # 将港股代码标准化为 logo 服务可识别的 ticker 格式。

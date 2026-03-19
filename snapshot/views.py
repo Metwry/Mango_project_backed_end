@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .serializers import AccountSnapshotQuerySerializer, PositionSnapshotQuerySerializer
-from .services import build_account_snapshot_query_result, build_position_snapshot_query_result
+from .services.query_service import build_account_snapshot_query_result, build_position_snapshot_query_result
 
 
 class AccountSnapshotQueryView(APIView):

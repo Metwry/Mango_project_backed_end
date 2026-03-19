@@ -19,7 +19,7 @@ from accounts.services.quote_providers import fetch_crypto_quotes_binance
 from investment.models import Position
 from market.models import Instrument
 from accounts.services.quote_providers import _to_billion_amount
-from market.services.cache_keys import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.snapshot.cache_keys import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
 from snapshot.models import AccountSnapshot, SnapshotDataStatus, SnapshotLevel
 
 

@@ -12,13 +12,15 @@ from .serializers import (
     SendRegisterEmailCodeSerializer,
     UpdateUsernameSerializer,
 )
-from .services import (
+from .services.auth_service import (
     build_login_payload,
     register_user_by_email,
     reset_user_password_by_email,
+    update_username_for_user,
+)
+from .services.email_code_service import (
     send_password_reset_email_code,
     send_register_email_code,
-    update_username_for_user,
 )
 
 

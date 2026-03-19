@@ -5,7 +5,7 @@ from django.test import override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from login.services import email_code_cache_key
+from login.services.email_code_service import email_code_cache_key
 
 
 @override_settings(
