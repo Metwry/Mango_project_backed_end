@@ -150,3 +150,4 @@ Mango Backend is the API service behind Mango Finance. It is built with Django a
 5. Run `python manage.py test`.
 
 For deployment and maintenance details, see [MAINTENANCE.md](docs/MAINTENANCE.md).
+

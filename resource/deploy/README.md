@@ -13,3 +13,4 @@
 - Current content: macOS `launchd` plist files for Redis, PostgreSQL, web, Celery worker, and Celery beat.
 - Use case: persistent local macOS deployment, reboot recovery, and service management.
 - Related docs: see [`../../MAINTENANCE.md`](../../docs/MAINTENANCE.md) and [`../scripts/README.md`](../scripts/README.md).
+

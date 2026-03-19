@@ -44,9 +44,9 @@
 
 建议同时准备可复用的启动方式，避免压测时再临时拼命令：
 
-- Windows PowerShell：`powershell -ExecutionPolicy Bypass -File resource/scripts/start_celery.ps1 -WithBeat`
-- Linux/macOS：`./resource/scripts/start_celery.sh --with-beat`
-- Web 进程：`./resource/scripts/start_web.sh` 或 `python manage.py runserver 0.0.0.0:8000`
+- Windows PowerShell：`powershell -ExecutionPolicy Bypass -File resource/scripts/windows/start_celery.ps1 -WithBeat`
+- Linux/macOS：`./resource/scripts/unix/start_celery.sh --with-beat`
+- Web 进程：`./resource/scripts/macos/start_web.sh` 或 `python manage.py runserver 0.0.0.0:8000`
 
 ## 3. 优先级排序
 
@@ -200,10 +200,10 @@
    使用仓库里的真实脚本启动 Celery/beat：
 
    PowerShell:
-   `powershell -ExecutionPolicy Bypass -File resource/scripts/start_celery.ps1 -WithBeat`
+   `powershell -ExecutionPolicy Bypass -File resource/scripts/windows/start_celery.ps1 -WithBeat`
 
    Bash:
-   `./resource/scripts/start_celery.sh --with-beat`
+   `./resource/scripts/unix/start_celery.sh --with-beat`
 
 2. 同时压 API
    配比建议：
@@ -309,3 +309,4 @@
 4. `Celery soak mode + snapshot query` 2 小时稳定性测试
 
 这 4 项最能尽快暴露你当前项目的真实瓶颈。
+

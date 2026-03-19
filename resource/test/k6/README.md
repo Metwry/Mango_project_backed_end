@@ -20,9 +20,9 @@ This directory contains a k6 suite aligned with the current Django backend route
 
 Suggested local startup:
 
-- PowerShell: `powershell -ExecutionPolicy Bypass -File resource/scripts/start_celery.ps1 -WithBeat`
-- Bash: `./resource/scripts/start_celery.sh --with-beat`
-- Web: `./resource/scripts/start_web.sh` or `python manage.py runserver 0.0.0.0:8000`
+- PowerShell: `powershell -ExecutionPolicy Bypass -File resource/scripts/windows/start_celery.ps1 -WithBeat`
+- Bash: `./resource/scripts/unix/start_celery.sh --with-beat`
+- Web: `./resource/scripts/macos/start_web.sh` or `python manage.py runserver 0.0.0.0:8000`
 
 ## Required environment variables
 
@@ -176,3 +176,4 @@ The ramping scripts support simple stage overrides:
 - `p3_soak_mixed.js` is designed to run while Celery beat and workers are already running.
 - `p4_auth.js` covers login, token refresh, and optional send-code endpoints. It does not complete full register/reset flows because the verification code is not readable from the cache or API response.
 - `p4_auth.js` can test email code endpoints only when you point it at a safe SMTP target.
+
