@@ -10,8 +10,8 @@ from accounts.services import (
     pull_usd_exchange_rates,
     pull_watchlist_quotes,
 )
-from shared.logging_utils import log_info
-from shared.utils import normalize_code, resolve_short_code, safe_payload_data
+from common.logging_utils import log_info
+from common.utils import normalize_code, resolve_short_code, safe_payload_data
 
 from .cache_keys import (
     FX_REFRESH_INTERVAL,
@@ -342,3 +342,4 @@ def sync_watchlist_snapshot() -> dict:
         log_info(logger, "watchlist.snapshot.no_market_update", stale_markets=stale_markets)
 
     return payload
+

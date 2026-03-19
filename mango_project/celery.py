@@ -3,7 +3,8 @@ import logging
 
 from celery import Celery
 from celery.signals import worker_ready
-from shared.logging_utils import log_info
+
+from common.logging_utils import log_info
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mango_project.settings")
@@ -33,3 +34,4 @@ def trigger_startup_pull(sender=None, **kwargs):
         logger.warning("worker 启动完成，已立即触发一次行情补拉任务")
     except Exception:
         logger.exception("worker 启动补拉触发失败")
+

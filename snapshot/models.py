@@ -4,7 +4,7 @@ from django.db import models
 from django.db.models import Q
 
 from accounts.models import Currency
-from shared.db import check_constraint
+from common.db import check_constraint
 
 
 class SnapshotDataStatus(models.TextChoices):
@@ -179,3 +179,4 @@ class PositionSnapshot(models.Model):
             models.Index(fields=["account", "snapshot_level", "snapshot_time"], name="snap_pos_acc_lvl_time_idx"),
             models.Index(fields=["snapshot_level", "snapshot_time"], name="snap_pos_lvl_time_idx"),
         ]
+

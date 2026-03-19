@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from shared.utils import normalize_code
+from common.utils import normalize_code
 
 from .models import Instrument
 
@@ -21,7 +21,6 @@ class MarketInstrumentSearchQuerySerializer(serializers.Serializer):
     def validate(self, attrs):
         query = (attrs.get("q") or attrs.get("keyword") or "").strip()
         attrs["query"] = query
-        attrs["query_upper"] = query.upper()
 
         raw_limit = attrs.get("limit")
         try:
@@ -73,20 +72,19 @@ class MarketWatchlistAddSerializer(serializers.Serializer):
 
 
 class MarketWatchlistDeleteSerializer(serializers.Serializer):
-    symbol = serializers.CharField(required=False, allow_blank=True)
-    market = serializers.CharField(required=False, allow_blank=True)
-    short_code = serializers.CharField(required=False, allow_blank=True)
+    market = serializers.CharField()
+    short_code = serializers.CharField()
 
-    # 校验删除自选所需的定位参数。
-    def validate(self, attrs):
-        symbol = str(attrs.get("symbol") or "").strip()
-        market = normalize_code(attrs.get("market"))
-        short_code = normalize_code(attrs.get("short_code"))
+    # 校验删除自选所需的 market 和 short_code。
+    def validate_market(self, value):
+        market = normalize_code(value)
+        if not market:
+            raise serializers.ValidationError("market 不能为空")
+        return market
 
-        if not symbol and not (market and short_code):
-            raise serializers.ValidationError("请提供 symbol，或同时提供 market + short_code")
+    def validate_short_code(self, value):
+        short_code = normalize_code(value)
+        if not short_code:
+            raise serializers.ValidationError("short_code 不能为空")
+        return short_code
 
-        attrs["symbol"] = symbol
-        attrs["market"] = market
-        attrs["short_code"] = short_code
-        return attrs

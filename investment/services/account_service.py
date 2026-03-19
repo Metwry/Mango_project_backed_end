@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.db import IntegrityError, transaction
 
 from accounts.models import Accounts, Currency, SYSTEM_INVESTMENT_ACCOUNT_NAME
-from shared.utils import normalize_code
+from common.utils import normalize_code
 
 from ..models import Position
 from .valuation_service import calculate_investment_account_valuation
@@ -165,3 +165,4 @@ def sync_investment_accounts_for_users(*, user_ids: Iterable[int]) -> dict[str, 
         "failed": len(failed_user_ids),
         "failed_user_ids": failed_user_ids,
     }
+

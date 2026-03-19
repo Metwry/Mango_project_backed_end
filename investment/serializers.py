@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from shared.utils import normalize_datetime_to_utc, quantize_decimal, trim_decimal_str
+from common.utils import normalize_datetime_to_utc, quantize_decimal, trim_decimal_str
 
 from .models import InvestmentRecord, Position
 from .services import (
@@ -140,3 +140,4 @@ class InvestmentHistoryItemSerializer(serializers.ModelSerializer):
         gross = quantize_decimal((obj.quantity or Decimal("0")) * (obj.price or Decimal("0")), Decimal("0.01"))
         amount = gross if obj.side == InvestmentRecord.Side.SELL else Decimal("0") - gross
         return trim_decimal_str(amount)
+

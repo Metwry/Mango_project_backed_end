@@ -40,7 +40,7 @@ def _parse_date(raw: str) -> date:
 def _calendar_output_dir(raw: str | None) -> Path:
     if raw:
         return Path(raw).resolve()
-    return (Path(getattr(settings, "BASE_DIR", Path.cwd())) / "data" / "market_calendars").resolve()
+    return (Path(getattr(settings, "BASE_DIR", Path.cwd())) / "resource" / "data" / "market_calendars").resolve()
 
 
 def _load_calendar(calendar_names: tuple[str, ...]):
@@ -72,7 +72,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--out-dir",
             default="",
-            help="Output directory. Default: <BASE_DIR>/data/market_calendars",
+            help="Output directory. Default: <BASE_DIR>/resource/data/market_calendars",
         )
 
     def handle(self, *args, **options):
@@ -155,4 +155,3 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"[{market}] wrote {out_file} rows={len(year_rows)}"))
 
         self.stdout.write(self.style.SUCCESS(f"done. generated_files={generated_files} out_dir={out_dir}"))
-

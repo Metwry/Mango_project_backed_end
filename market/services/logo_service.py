@@ -15,7 +15,7 @@ import requests
 from PIL import Image
 
 from market.models import Instrument
-from shared.utils import normalize_code
+from common.utils import normalize_code
 
 
 # 将港股代码标准化为 logo 服务可识别的 ticker 格式。
@@ -227,3 +227,4 @@ def extract_logo_theme_color(logo_url: str, *, timeout: float = 8.0) -> str | No
     if all_counter:
         return _hex_color(all_counter.most_common(1)[0][0])
     return None
+

@@ -10,9 +10,9 @@ from accounts.services.transaction_service import create_transaction_for_locked_
 from market.models import Instrument
 from market.services.quote_snapshot_service import ensure_instrument_quote
 from market.services.subscription_service import SOURCE_POSITION, set_user_instrument_source
-from shared.constants import market_currency
-from shared.exceptions import BusinessConflictError
-from shared.utils import quantize_decimal, trim_decimal, trim_decimal_str
+from common.constants import market_currency
+from common.exceptions import BusinessConflictError
+from common.utils import quantize_decimal, trim_decimal, trim_decimal_str
 
 from ..models import InvestmentRecord, Position
 from .account_service import sync_investment_account_for_user
@@ -338,3 +338,4 @@ def delete_zero_position(*, user, instrument_id: int) -> dict:
         "instrument_id": instrument_id,
         "stock_code": instrument.symbol,
     }
+

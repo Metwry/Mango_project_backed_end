@@ -13,10 +13,10 @@ from accounts.models import Accounts, is_system_investment_account
 from investment.models import Position
 from market.services.fx_rate_service import get_fx_rates
 from market.services.quote_snapshot_service import build_quote_index, get_snapshot_payload
-from shared.constants import market_currency
-from shared.fx import normalize_usd_rates
-from shared.time import floor_bucket
-from shared.utils import normalize_code, quantize_decimal, strip_market_suffix, to_decimal
+from common.constants import market_currency
+from common.fx import normalize_usd_rates
+from common.time import floor_bucket
+from common.utils import normalize_code, quantize_decimal, strip_market_suffix, to_decimal
 
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
 
@@ -432,3 +432,4 @@ def aggregate_snapshots(*, level: str, snapshot_time=None) -> dict[str, int | st
         "account_snapshot_written": account_written,
         "position_snapshot_written": position_written,
     }
+

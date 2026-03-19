@@ -5,8 +5,8 @@ from decimal import Decimal
 
 from accounts.services.currency_service import load_cached_usd_rates
 from market.services.quote_snapshot_service import build_quote_index, get_snapshot_payload
-from shared.constants import market_currency
-from shared.utils import normalize_code, quantize_decimal, strip_market_suffix, to_decimal
+from common.constants import market_currency
+from common.utils import normalize_code, quantize_decimal, strip_market_suffix, to_decimal
 
 from ..models import Position
 
@@ -125,3 +125,4 @@ def calculate_investment_account_valuation(*, positions: list[Position], target_
         quoted_position_count=quoted_count,
         cost_fallback_position_count=cost_fallback_count,
     )
+
