@@ -11,7 +11,7 @@ from django.utils import timezone as django_timezone
 from rest_framework.exceptions import ValidationError
 
 from market.models import Instrument
-from shared.utils import to_decimal, trim_decimal_str
+from common.utils import to_decimal, trim_decimal_str
 
 from .cache_keys import MARKET_INDEX_QUOTES_KEY, MARKET_INDEX_QUOTES_MARKET_KEY_PREFIX
 from .calendar_guard_service import market_guard_decision
@@ -282,3 +282,4 @@ def build_market_indices_snapshot() -> dict:
         "updated_at": payload.get("updated_at"),
         "items": items,
     }
+

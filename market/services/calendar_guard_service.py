@@ -52,7 +52,7 @@ def _calendar_dir() -> Path:
     raw = str(getattr(settings, "MARKET_CALENDAR_DIR", "") or "").strip()
     if raw:
         return Path(raw).resolve()
-    return (Path(getattr(settings, "BASE_DIR", Path.cwd())) / "data" / "market_calendars").resolve()
+    return (Path(getattr(settings, "BASE_DIR", Path.cwd())) / "resource" / "data" / "market_calendars").resolve()
 
 
 # 判断当前配置是否要求市场日历必须存在。

@@ -3,7 +3,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from accounts.services import pull_single_instrument_quote
-from shared.utils import normalize_code, resolve_short_code, safe_payload_data, to_decimal, trim_decimal_str
+from common.utils import normalize_code, resolve_short_code, safe_payload_data, to_decimal, trim_decimal_str
 
 from .cache_keys import (
     DEFAULT_WATCHLIST_ORPHAN_TTL,
@@ -238,3 +238,4 @@ def ensure_instrument_quote(instrument, fetch_missing: bool = True, use_orphan: 
     upsert_market_quote(data, market, one_quote)
     write_snapshot(payload, data, {market})
     return True, "api"
+

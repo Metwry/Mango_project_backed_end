@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>cc.mango.backend.celery.beat</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/scripts/start_celery_beat.sh</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/wry/Services/Mango_project/Mango_project_backed_end</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>UserName</key>
+    <string>wry</string>
+    <key>StandardOutPath</key>
+    <string>/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/tmp_celery_logs/celery_beat.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/tmp_celery_logs/celery_beat.err.log</string>
+  </dict>
+</plist>

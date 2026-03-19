@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from rest_framework import serializers
 
-from shared.utils import normalize_datetime_to_utc
+from common.utils import normalize_datetime_to_utc
 from snapshot.models import SnapshotLevel
 
 
@@ -41,3 +41,4 @@ class AccountSnapshotQuerySerializer(SnapshotQueryBaseSerializer):
 class PositionSnapshotQuerySerializer(SnapshotQueryBaseSerializer):
     account_id = serializers.IntegerField(required=False, min_value=1)
     instrument_id = serializers.IntegerField(required=False, min_value=1)
+

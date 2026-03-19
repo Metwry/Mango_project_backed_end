@@ -3,8 +3,8 @@ from decimal import Decimal
 from django.core.cache import cache
 
 from market.services.cache_keys import USD_EXCHANGE_RATES_KEY
-from shared.fx import normalize_usd_rates
-from shared.utils import normalize_code, quantize_decimal
+from common.fx import normalize_usd_rates
+from common.utils import normalize_code, quantize_decimal
 
 ACCOUNT_PRECISION = Decimal("0.01")
 
@@ -31,3 +31,4 @@ def convert_amount_or_raise(*, amount: Decimal, from_currency: str, to_currency:
 
     converted = (amount / source_rate) * target_rate
     return quantize_decimal(converted, ACCOUNT_PRECISION)
+

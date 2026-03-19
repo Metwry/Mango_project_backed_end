@@ -1,7 +1,7 @@
 from datetime import timezone as dt_timezone
 
-from shared.time import build_bucket_axis
-from shared.utils import trim_decimal_str
+from common.time import build_bucket_axis
+from common.utils import trim_decimal_str
 
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotLevel
 
@@ -193,3 +193,4 @@ def build_position_snapshot_query_result(*, user, params: dict) -> dict:
         "series_count": len(series_map),
         "series": list(series_map.values()),
     }
+

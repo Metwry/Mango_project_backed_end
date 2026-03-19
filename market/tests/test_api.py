@@ -179,6 +179,14 @@ class MarketBasicApiTests(APITestCase):
         self.assertGreaterEqual(len(resp.data["results"]), 1)
         self.assertIn("instrument_id", resp.data["results"][0])
 
+    def test_market_search_accepts_lowercase_code_query(self):
+        """验证市场 搜索 对代码支持大小写混传。"""
+        resp = self.client.get("/api/user/markets/search/?q=aapl")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(resp.data["results"]), 1)
+        self.assertEqual(resp.data["results"][0]["short_code"], "AAPL")
+
     def test_market_search_blank_query_returns_empty_results(self):
         """验证市场 搜索 空查询返回空结果。"""
         resp = self.client.get("/api/user/markets/search/?q=   ")
@@ -219,7 +227,11 @@ class MarketComplexApiTests(APITestCase):
             from_position=True,
             from_watchlist=True,
         )
-        resp = self.client.delete(self.watchlist_endpoint, {"symbol": "AAPL.US"}, format="json")
+        resp = self.client.delete(
+            self.watchlist_endpoint,
+            {"market": "us", "short_code": "aapl"},
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
         sub = UserInstrumentSubscription.objects.get(user=self.user, instrument=self.instrument)
@@ -257,7 +269,11 @@ class MarketComplexApiTests(APITestCase):
         add_resp = self.client.post(self.watchlist_endpoint, {"symbol": "AAPL.US"}, format="json")
         self.assertEqual(add_resp.status_code, status.HTTP_201_CREATED)
 
-        del_resp = self.client.delete(self.watchlist_endpoint, {"symbol": "AAPL.US"}, format="json")
+        del_resp = self.client.delete(
+            self.watchlist_endpoint,
+            {"market": "us", "short_code": "aapl"},
+            format="json",
+        )
         self.assertEqual(del_resp.status_code, status.HTTP_200_OK)
         self.assertFalse(UserInstrumentSubscription.objects.filter(user=self.user, instrument=self.instrument).exists())
 

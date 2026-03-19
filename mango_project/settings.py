@@ -28,6 +28,7 @@ else:
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+RESOURCE_DIR = BASE_DIR / "resource"
 
 
 def _load_dotenv_file(path: Path) -> None:
@@ -110,7 +111,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
-    "EXCEPTION_HANDLER": "shared.exception_handler.custom_exception_handler",
+    "EXCEPTION_HANDLER": "common.exception_handler.custom_exception_handler",
 }
 # JWT过期时间 配置
 SIMPLE_JWT = {
@@ -164,8 +165,8 @@ LOGO_DEV_PUBLISHABLE_KEY = os.getenv(
     "LOGO_DEV_PUBLISHABLE_KEY",
     os.getenv("LOGO_DEV_API_KEY", ""),
 ).strip()
-LOGO_DOWNLOAD_DIR = os.getenv("LOGO_DOWNLOAD_DIR", str((BASE_DIR.parent / "logo_downloads").resolve())).strip()
-MARKET_CALENDAR_DIR = os.getenv("MARKET_CALENDAR_DIR", str((BASE_DIR / "data" / "market_calendars").resolve())).strip()
+LOGO_DOWNLOAD_DIR = os.getenv("LOGO_DOWNLOAD_DIR", str((RESOURCE_DIR / "logo_downloads").resolve())).strip()
+MARKET_CALENDAR_DIR = os.getenv("MARKET_CALENDAR_DIR", str((RESOURCE_DIR / "data" / "market_calendars").resolve())).strip()
 MARKET_CALENDAR_REQUIRED = os.getenv("MARKET_CALENDAR_REQUIRED", "true").strip().lower() in {"1", "true", "yes"}
 MARKET_PULL_FALLBACK_ON_MISSING_CALENDAR = (
     os.getenv("MARKET_PULL_FALLBACK_ON_MISSING_CALENDAR", "false").strip().lower() in {"1", "true", "yes"}

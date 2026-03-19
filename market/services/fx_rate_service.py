@@ -2,7 +2,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from accounts.services import pull_usd_exchange_rates
-from shared.fx import normalize_usd_rates
+from common.fx import normalize_usd_rates
 
 from .cache_keys import USD_EXCHANGE_RATES_KEY, UTC8, WATCHLIST_QUOTES_KEY
 
@@ -50,3 +50,4 @@ def get_fx_rates(requested_base: str) -> dict:
         "updated_at": updated_at,
         "rates": final_rates,
     }
+

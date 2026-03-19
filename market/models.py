@@ -3,7 +3,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
-from shared.db import check_constraint
+from common.db import check_constraint
 
 
 class Instrument(models.Model):
@@ -153,3 +153,4 @@ class UserInstrumentSubscription(models.Model):
             models.Index(fields=["instrument"], name="mkt_sub_instrument_idx"),
             models.Index(fields=["user", "updated_at"], name="mkt_sub_user_updated_idx"),
         ]
+

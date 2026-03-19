@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from market.models import UserInstrumentSubscription
-from shared.utils import normalize_code, resolve_short_code
+from common.utils import normalize_code, resolve_short_code
 
 
 # 返回全局订阅标的按市场聚合后的元数据。
@@ -55,3 +55,4 @@ def user_watchlist_codes_by_market(user) -> dict[str, set[str]]:
             continue
         grouped.setdefault(market_code, set()).add(code)
     return grouped
+

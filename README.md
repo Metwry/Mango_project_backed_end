@@ -29,7 +29,7 @@ Mango Backend 是 Mango Finance 的后端服务，基于 Django + Django REST Fr
 - [market/README.md](market/README.md)：交易品种、行情查询、自选股、汇率和指数快照
 - [investment/README.md](investment/README.md)：买卖记录、持仓、已实现盈亏
 - [snapshot/README.md](snapshot/README.md)：账户和持仓快照采集、聚合、查询
-- [shared/README.md](shared/README.md)：公共约束、异常、时间与工具方法
+- [common/README.md](common/README.md)：公共约束、异常、时间与工具方法
 
 ### 4. 目录结构
 
@@ -41,10 +41,12 @@ Mango Backend 是 Mango Finance 的后端服务，基于 Django + Django REST Fr
 |-- market/          行情与交易品种
 |-- investment/      投资交易与持仓
 |-- snapshot/        快照采集与查询
-|-- shared/          公共基础设施
-|-- data/            静态市场日历数据
-|-- scripts/         本地启动和安装脚本
-|-- deploy/          部署模板文件
+|-- common/          公共基础设施
+|-- docs/            项目文档与维护手册
+|-- resource/data/   静态市场日历数据
+|-- resource/scripts/ 启动、停止和安装脚本
+|-- resource/deploy/  部署模板文件
+|-- resource/test/    压测与测试资源
 ```
 
 ### 5. 运行要求
@@ -73,7 +75,7 @@ celery -A mango_project worker -l info
 celery -A mango_project beat -l info
 ```
 
-也可以直接使用 [scripts/README.md](scripts/README.md) 中的脚本。
+也可以直接使用 [resource/scripts/README.md](resource/scripts/README.md) 中的脚本。
 
 ### 7. 定时任务
 
@@ -98,7 +100,7 @@ celery -A mango_project beat -l info
 ### 9. 测试与维护
 
 - 自动化测试入口：`python manage.py test`
-- 维护与发布说明：[`MAINTENANCE.md`](MAINTENANCE.md)
+- 维护与发布说明：[`MAINTENANCE.md`](docs/MAINTENANCE.md)
 
 ## English Guide
 
@@ -125,11 +127,11 @@ Mango Backend is the API service behind Mango Finance. It is built with Django a
 | [market/README.md](market/README.md) | Instrument master data, quotes, FX, watchlist |
 | [investment/README.md](investment/README.md) | Buy/sell execution, positions, trade history |
 | [snapshot/README.md](snapshot/README.md) | Timed snapshots, aggregation, query APIs |
-| [shared/README.md](shared/README.md) | Shared exceptions, constraints, utilities |
+| [common/README.md](common/README.md) | Common exceptions, constraints, utilities |
 | [mango_project/README.md](mango_project/README.md) | Django project wiring, settings, Celery bootstrap |
-| [data/README.md](data/README.md) | Static market calendar data |
-| [scripts/README.md](scripts/README.md) | Local bootstrap and start/stop scripts |
-| [deploy/README.md](deploy/README.md) | Deployment descriptors for launchd |
+| [resource/data/README.md](resource/data/README.md) | Static market calendar data |
+| [resource/scripts/README.md](resource/scripts/README.md) | Local bootstrap and start/stop scripts |
+| [resource/deploy/README.md](resource/deploy/README.md) | Deployment descriptors for launchd |
 
 ### 4. Runtime
 
@@ -147,4 +149,4 @@ Mango Backend is the API service behind Mango Finance. It is built with Django a
 4. Start Django and Celery processes.
 5. Run `python manage.py test`.
 
-For deployment and maintenance details, see [MAINTENANCE.md](MAINTENANCE.md).
+For deployment and maintenance details, see [MAINTENANCE.md](docs/MAINTENANCE.md).

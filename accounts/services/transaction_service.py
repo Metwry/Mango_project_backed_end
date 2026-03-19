@@ -6,7 +6,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 
 from accounts.models import Accounts, Transaction, is_system_investment_account
 from investment.models import InvestmentRecord
-from shared.utils import quantize_decimal
+from common.utils import quantize_decimal
 
 from .currency_service import convert_amount_or_raise
 
@@ -326,3 +326,4 @@ def create_transaction_for_user(*, serializer, user):
             source=Transaction.Source.MANUAL,
             remark=str(validated.get("remark") or "").strip(),
         )
+

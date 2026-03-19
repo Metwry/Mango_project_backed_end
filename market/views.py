@@ -23,7 +23,7 @@ from .services import (
 class MarketsView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # 返回当前用户自选市场的最新行情行情数据。
+    # ed 返回当前用户自选市场的最新行情数据。
     def get(self, request, *args, **kwargs):
         return Response(build_user_markets_snapshot(request.user), status=status.HTTP_200_OK)
 
@@ -31,7 +31,7 @@ class MarketsView(APIView):
 class MarketFxRatesView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # 返回指定基准货币对应的汇率行情数据。
+    # ed 返回指定基准货币对应的汇率行情数据。
     def get(self, request, *args, **kwargs):
         try:
             payload = get_fx_rates(request.query_params.get("base"))
@@ -46,7 +46,7 @@ class MarketFxRatesView(APIView):
 class MarketInstrumentSearchView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # 根据关键词搜索可交易标的。
+    # ed 根据关键词搜索可交易标的。
     def get(self, request, *args, **kwargs):
         params = MarketInstrumentSearchQuerySerializer(data=request.query_params)
         params.is_valid(raise_exception=True)
@@ -56,7 +56,6 @@ class MarketInstrumentSearchView(APIView):
 
         qs = search_instruments(
             query=params.validated_data["query"],
-            query_upper=params.validated_data["query_upper"],
             limit=params.validated_data["limit"],
         )
         serializer = InstrumentSearchItemSerializer(qs, many=True)
@@ -66,7 +65,7 @@ class MarketInstrumentSearchView(APIView):
 class MarketLatestQuoteBatchView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # 批量返回多个标的的最新价格摘要。
+    # ed 批量返回持仓标的的最新价格数据。
     def post(self, request, *args, **kwargs):
         serializer = MarketLatestQuoteBatchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -77,7 +76,7 @@ class MarketLatestQuoteBatchView(APIView):
 class MarketIndexSnapshotView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # 返回核心指数行情快照。
+    # ed 返回核心指数行情快照。
     def get(self, request, *args, **kwargs):
         return Response(build_market_indices_snapshot(), status=status.HTTP_200_OK)
 
@@ -85,7 +84,7 @@ class MarketIndexSnapshotView(APIView):
 class MarketWatchlistAddView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # 将指定标的加入当前用户自选。
+    # ed 将指定标的加入当前用户自选。
     def post(self, request, *args, **kwargs):
         serializer = MarketWatchlistAddSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -97,14 +96,13 @@ class MarketWatchlistAddView(APIView):
         status_code = status.HTTP_201_CREATED if result.get("created") else status.HTTP_200_OK
         return Response(result, status=status_code)
 
-    # 将指定标的从当前用户自选移除，并同步更新缓存行情。
+    # ed 将指定标的从当前用户自选移除，并同步更新缓存行情。
     def delete(self, request, *args, **kwargs):
         serializer = MarketWatchlistDeleteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         result = delete_watchlist_symbol(
             user=request.user,
-            symbol=serializer.validated_data.get("symbol", ""),
-            market=serializer.validated_data.get("market", ""),
-            short_code=serializer.validated_data.get("short_code", ""),
+            market=serializer.validated_data["market"],
+            short_code=serializer.validated_data["short_code"],
         )
         return Response(result, status=status.HTTP_200_OK)

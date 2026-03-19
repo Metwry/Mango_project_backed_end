@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from shared.exceptions import LoginFailedError
+from common.exceptions import LoginFailedError
 
 from .services import (
     authenticate_email_password,
@@ -119,3 +119,4 @@ class UpdateUsernameSerializer(serializers.Serializer):
         if not username:
             raise serializers.ValidationError("用户名不能为空")
         return username
+
