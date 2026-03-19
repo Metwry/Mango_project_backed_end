@@ -1,7 +1,7 @@
 from datetime import timezone as dt_timezone
 
-from common.time import build_bucket_axis
-from common.utils import trim_decimal_str
+from common.time.buckets import build_bucket_axis
+from common.utils.decimal_utils import trim_decimal_str
 
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotLevel
 

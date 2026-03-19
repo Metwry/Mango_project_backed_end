@@ -10,9 +10,9 @@ from django.utils import timezone
 
 from accounts.models import Accounts, is_system_investment_account
 from investment.models import Position
-from market.services.fx_rate_service import get_fx_rates
-from common.constants import market_currency
-from common.time import floor_bucket
+from market.services.snapshot.fx_rate import get_fx_rates
+from common.constants.market import market_currency
+from common.time.buckets import floor_bucket
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
 from snapshot.services.snapshot_service import cleanup_expired_snapshots
 

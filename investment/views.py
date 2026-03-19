@@ -1,4 +1,5 @@
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -6,18 +7,11 @@ from rest_framework.views import APIView
 from .serializers import (
     InvestmentHistoryItemSerializer,
     InvestmentHistoryQuerySerializer,
-    InvestmentBuySerializer,
-    InvestmentSellSerializer,
-    PositionDeleteSerializer,
+    InvestmentTradeSerializer,
     PositionListItemSerializer,
 )
-from .services import (
-    build_position_list_queryset,
-    delete_zero_position,
-    execute_buy,
-    execute_sell,
-    query_investment_history,
-)
+from .services.query_service import build_position_list_queryset, query_investment_history
+from .services.trade_service import delete_zero_position, execute_buy, execute_sell
 
 
 class InvestmentBuyView(APIView):
@@ -25,7 +19,7 @@ class InvestmentBuyView(APIView):
 
     # 执行买入交易并返回持仓与资金流水结果。
     def post(self, request, *args, **kwargs):
-        serializer = InvestmentBuySerializer(data=request.data)
+        serializer = InvestmentTradeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         result = execute_buy(user=request.user, **serializer.validated_data)
         return Response(result, status=status.HTTP_201_CREATED)
@@ -36,7 +30,7 @@ class InvestmentSellView(APIView):
 
     # 执行卖出交易并返回持仓、已实现盈亏与资金流水结果。
     def post(self, request, *args, **kwargs):
-        serializer = InvestmentSellSerializer(data=request.data)
+        serializer = InvestmentTradeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         result = execute_sell(user=request.user, **serializer.validated_data)
         return Response(result, status=status.HTTP_201_CREATED)
@@ -57,11 +51,11 @@ class InvestmentPositionDeleteView(APIView):
 
     # 删除数量为 0 的持仓记录。
     def delete(self, request, instrument_id: int, *args, **kwargs):
-        serializer = PositionDeleteSerializer(data={"instrument_id": instrument_id})
-        serializer.is_valid(raise_exception=True)
+        if instrument_id <= 0:
+            raise ValidationError({"instrument_id": "instrument_id 必须大于 0"})
         result = delete_zero_position(
             user=request.user,
-            instrument_id=serializer.validated_data["instrument_id"],
+            instrument_id=instrument_id,
         )
         return Response(result, status=status.HTTP_200_OK)
 

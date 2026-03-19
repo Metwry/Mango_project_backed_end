@@ -2,15 +2,14 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from common.utils import normalize_datetime_to_utc, quantize_decimal, trim_decimal_str
+from common.utils.datetime_utils import normalize_datetime_to_utc
+from common.utils.decimal_utils import quantize_decimal, trim_decimal_str
 
 from .models import InvestmentRecord, Position
-from .services import (
-    POSITION_ZERO,
-)
+from .services.trade_service import POSITION_ZERO
 
 
-class InvestmentTradeBaseSerializer(serializers.Serializer):
+class InvestmentTradeSerializer(serializers.Serializer):
     instrument_id = serializers.IntegerField(min_value=1)
     quantity = serializers.DecimalField(
         max_digits=20,
@@ -24,14 +23,6 @@ class InvestmentTradeBaseSerializer(serializers.Serializer):
     )
     cash_account_id = serializers.IntegerField(min_value=1)
     trade_at = serializers.DateTimeField(required=False)
-
-
-class InvestmentBuySerializer(InvestmentTradeBaseSerializer):
-    pass
-
-
-class InvestmentSellSerializer(InvestmentTradeBaseSerializer):
-    pass
 
 
 class PositionListItemSerializer(serializers.ModelSerializer):
@@ -69,10 +60,6 @@ class PositionListItemSerializer(serializers.ModelSerializer):
     @staticmethod
     def get_current_value(obj: Position) -> str:
         return trim_decimal_str(obj.cost_total or POSITION_ZERO)
-
-
-class PositionDeleteSerializer(serializers.Serializer):
-    instrument_id = serializers.IntegerField(min_value=1)
 
 
 class InvestmentHistoryQuerySerializer(serializers.Serializer):

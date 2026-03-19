@@ -1,8 +1,8 @@
 from rest_framework import serializers
 from common.exceptions import LoginFailedError
 
-from .services import (
-    authenticate_email_password,
+from .services.auth_service import authenticate_email_password
+from .services.email_code_service import (
     ensure_email_registered,
     ensure_email_not_registered,
     verify_password_reset_email_code,

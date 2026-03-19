@@ -2,9 +2,10 @@ from decimal import Decimal
 
 from django.core.cache import cache
 
-from market.services.cache_keys import USD_EXCHANGE_RATES_KEY
-from common.fx import normalize_usd_rates
-from common.utils import normalize_code, quantize_decimal
+from market.services.snapshot.cache_keys import USD_EXCHANGE_RATES_KEY
+from common.fx.rates import normalize_usd_rates
+from common.utils.code_utils import normalize_code
+from common.utils.decimal_utils import quantize_decimal
 
 ACCOUNT_PRECISION = Decimal("0.01")
 

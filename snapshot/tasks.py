@@ -1,7 +1,7 @@
 from celery import shared_task
 
 from snapshot.models import SnapshotLevel
-from snapshot.services import aggregate_snapshots, capture_snapshots, cleanup_expired_snapshots
+from snapshot.services.snapshot_service import aggregate_snapshots, capture_snapshots, cleanup_expired_snapshots
 
 
 @shared_task

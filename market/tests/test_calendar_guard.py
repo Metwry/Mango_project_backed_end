@@ -7,8 +7,8 @@ from pathlib import Path
 from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
 
-from market.services.cache_keys import WATCHLIST_QUOTES_MARKET_KEY_PREFIX
-from market.services.calendar_guard_service import _CALENDAR_CACHE, market_guard_decision
+from market.services.snapshot.cache_keys import WATCHLIST_QUOTES_MARKET_KEY_PREFIX
+from market.services.snapshot.calendar_guard import _CALENDAR_CACHE, market_guard_decision
 
 
 @override_settings(

@@ -1,8 +1,7 @@
 from django.core.cache import cache
 from django.utils import timezone
 
-from accounts.services import pull_usd_exchange_rates
-from common.fx import normalize_usd_rates
+from common.fx.rates import normalize_usd_rates
 
 from .cache_keys import USD_EXCHANGE_RATES_KEY, UTC8, WATCHLIST_QUOTES_KEY
 
@@ -14,6 +13,8 @@ def _normalize_rates(raw_rates: object) -> dict[str, float]:
 
 # 返回指定基准币种对应的汇率快照，必要时触发重新拉取。
 def get_fx_rates(requested_base: str) -> dict:
+    from accounts.services.quote_fetcher import pull_usd_exchange_rates
+
     base = str(requested_base or "USD").strip().upper()
 
     payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}

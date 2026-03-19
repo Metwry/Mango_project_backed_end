@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.db import IntegrityError, transaction
 
 from accounts.models import Accounts, Currency, SYSTEM_INVESTMENT_ACCOUNT_NAME
-from common.utils import normalize_code
+from common.utils.code_utils import normalize_code
 
 from ..models import Position
 from .valuation_service import calculate_investment_account_valuation

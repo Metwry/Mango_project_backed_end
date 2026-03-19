@@ -17,7 +17,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from market.models import Instrument
-from market.services.index_catalog import index_definitions_for_markets
+from market.services.index.catalog import index_definitions_for_markets
 from market.services.logo_service import build_logo_metadata
 
 

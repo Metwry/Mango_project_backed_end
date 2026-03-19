@@ -11,11 +11,11 @@ from django.utils import timezone as django_timezone
 from rest_framework.exceptions import ValidationError
 
 from market.models import Instrument
-from common.utils import to_decimal, trim_decimal_str
+from common.utils.decimal_utils import to_decimal, trim_decimal_str
 
-from .cache_keys import MARKET_INDEX_QUOTES_KEY, MARKET_INDEX_QUOTES_MARKET_KEY_PREFIX
-from .calendar_guard_service import market_guard_decision
-from .index_catalog import CORE_INDEX_DEFINITIONS, IndexDefinition, index_definition_by_symbol
+from ..snapshot.cache_keys import MARKET_INDEX_QUOTES_KEY, MARKET_INDEX_QUOTES_MARKET_KEY_PREFIX
+from ..snapshot.calendar_guard import market_guard_decision
+from .catalog import CORE_INDEX_DEFINITIONS, index_definition_by_symbol
 
 logger = logging.getLogger(__name__)
 

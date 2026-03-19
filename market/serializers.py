@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from common.utils import normalize_code
+from common.utils.code_utils import normalize_code
 
 from .models import Instrument
 
@@ -58,33 +58,4 @@ class MarketLatestQuoteBatchSerializer(serializers.Serializer):
         if len(value) > 300:
             raise serializers.ValidationError("items 最多 300 条")
         return value
-
-
-class MarketWatchlistAddSerializer(serializers.Serializer):
-    symbol = serializers.CharField()
-
-    # 校验加入自选的完整代码。
-    def validate_symbol(self, value):
-        symbol = str(value or "").strip()
-        if not symbol:
-            raise serializers.ValidationError("symbol 不能为空")
-        return symbol
-
-
-class MarketWatchlistDeleteSerializer(serializers.Serializer):
-    market = serializers.CharField()
-    short_code = serializers.CharField()
-
-    # 校验删除自选所需的 market 和 short_code。
-    def validate_market(self, value):
-        market = normalize_code(value)
-        if not market:
-            raise serializers.ValidationError("market 不能为空")
-        return market
-
-    def validate_short_code(self, value):
-        short_code = normalize_code(value)
-        if not short_code:
-            raise serializers.ValidationError("short_code 不能为空")
-        return short_code
 

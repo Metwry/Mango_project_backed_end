@@ -4,9 +4,9 @@ from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
 from unittest.mock import patch
 
-from market.services.cache_keys import WATCHLIST_QUOTES_KEY, WATCHLIST_QUOTES_MARKET_KEY_PREFIX
-from market.services.calendar_guard_service import GuardDecision
-from market.services.snapshot_sync_service import sync_watchlist_snapshot
+from market.services.snapshot.cache_keys import WATCHLIST_QUOTES_KEY, WATCHLIST_QUOTES_MARKET_KEY_PREFIX
+from market.services.snapshot.calendar_guard import GuardDecision
+from market.services.snapshot.sync import sync_watchlist_snapshot
 
 
 @override_settings(
@@ -21,10 +21,10 @@ class SnapshotSyncServiceTests(SimpleTestCase):
     def setUp(self):
         cache.clear()
 
-    @patch("market.services.snapshot_sync_service._need_refresh_fx_rates", return_value=False)
-    @patch("market.services.snapshot_sync_service.pull_watchlist_quotes")
-    @patch("market.services.snapshot_sync_service.resolve_due_markets")
-    @patch("market.services.snapshot_sync_service.global_subscription_meta_by_market")
+    @patch("market.services.snapshot.sync._need_refresh_fx_rates", return_value=False)
+    @patch("market.services.snapshot.sync.pull_watchlist_quotes")
+    @patch("market.services.snapshot.sync.resolve_due_markets")
+    @patch("market.services.snapshot.sync.global_subscription_meta_by_market")
     def test_force_init_pull_when_bootstrap_but_not_due(
         self,
         mock_sub_meta,
@@ -65,10 +65,10 @@ class SnapshotSyncServiceTests(SimpleTestCase):
         market_payload = cache.get(f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}US")
         self.assertEqual(market_payload["pulled_at"], payload["updated_at"])
 
-    @patch("market.services.snapshot_sync_service._need_refresh_fx_rates", return_value=False)
-    @patch("market.services.snapshot_sync_service.pull_watchlist_quotes")
-    @patch("market.services.snapshot_sync_service.resolve_due_markets")
-    @patch("market.services.snapshot_sync_service.global_subscription_meta_by_market")
+    @patch("market.services.snapshot.sync._need_refresh_fx_rates", return_value=False)
+    @patch("market.services.snapshot.sync.pull_watchlist_quotes")
+    @patch("market.services.snapshot.sync.resolve_due_markets")
+    @patch("market.services.snapshot.sync.global_subscription_meta_by_market")
     def test_no_due_and_no_bootstrap_keeps_previous_pulled_at(
         self,
         mock_sub_meta,

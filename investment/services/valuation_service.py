@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from accounts.services.currency_service import load_cached_usd_rates
-from market.services.quote_snapshot_service import build_quote_index, get_snapshot_payload
-from common.constants import market_currency
-from common.utils import normalize_code, quantize_decimal, strip_market_suffix, to_decimal
+from market.services.snapshot.quote_store import build_quote_index, get_snapshot_payload
+from common.constants.market import market_currency
+from common.utils.code_utils import normalize_code, strip_market_suffix
+from common.utils.decimal_utils import quantize_decimal, to_decimal
 
 from ..models import Position
 

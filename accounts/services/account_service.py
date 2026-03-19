@@ -3,7 +3,7 @@ from rest_framework.exceptions import ValidationError
 
 from accounts.models import Accounts, is_system_investment_account
 from investment.services.account_service import sync_investment_account_for_user
-from common.utils import normalize_code
+from common.utils.code_utils import normalize_code
 
 from .currency_service import convert_amount_or_raise
 
