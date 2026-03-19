@@ -7,7 +7,7 @@
     <key>ProgramArguments</key>
     <array>
       <string>/bin/bash</string>
-      <string>/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/scripts/start_web.sh</string>
+      <string>/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/scripts/macos/start_web.sh</string>
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/wry/Services/Mango_project/Mango_project_backed_end</string>

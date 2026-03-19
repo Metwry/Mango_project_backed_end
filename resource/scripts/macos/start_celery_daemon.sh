@@ -11,7 +11,7 @@ export PATH="${CONDA_BASE}/bin:${CONDA_BASE}/condabin:/opt/homebrew/bin:/usr/bin
 cd "${PROJECT_ROOT}"
 mkdir -p "${PROJECT_ROOT}/resource/tmp_celery_logs" "${PROJECT_ROOT}/resource/tmp_celery_state"
 
-exec "${PROJECT_ROOT}/resource/scripts/start_celery.sh" \
+exec "${PROJECT_ROOT}/resource/scripts/macos/start_celery.sh" \
   --project-root "${PROJECT_ROOT}" \
   --env-name "${ENV_NAME}" \
   --targets all \

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ "${EUID}" -ne 0 ]]; then
-  echo "Please run with sudo: sudo bash resource/scripts/install_system_launchdaemons.sh" >&2
+  echo "Please run with sudo: sudo bash resource/scripts/macos/install_system_launchdaemons.sh" >&2
   exit 1
 fi
 
