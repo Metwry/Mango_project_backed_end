@@ -9,13 +9,7 @@ param(
     [string]$StateDir = "resource/tmp_celery_state",
     [switch]$FollowLogs,
     [int]$TailLines = 50,
-    [switch]$FakeProvider,
-    [int]$MarketSyncEverySeconds = 0,
-    [int]$SnapshotCaptureEverySeconds = 0,
-    [int]$SnapshotAggH4EverySeconds = 0,
-    [int]$SnapshotAggD1EverySeconds = 0,
-    [int]$SnapshotAggMon1EverySeconds = 0,
-    [int]$SnapshotCleanupEverySeconds = 0
+    [switch]$FakeProvider
 )
 
 $ErrorActionPreference = "Stop"
@@ -140,24 +134,6 @@ $commands = @{
 $processEnv = @{}
 if ($FakeProvider) {
     $processEnv["MARKET_QUOTE_PROVIDER"] = "fake"
-}
-if ($MarketSyncEverySeconds -gt 0) {
-    $processEnv["MARKET_SYNC_TEST_EVERY_SECONDS"] = "$MarketSyncEverySeconds"
-}
-if ($SnapshotCaptureEverySeconds -gt 0) {
-    $processEnv["SNAPSHOT_CAPTURE_TEST_EVERY_SECONDS"] = "$SnapshotCaptureEverySeconds"
-}
-if ($SnapshotAggH4EverySeconds -gt 0) {
-    $processEnv["SNAPSHOT_AGG_H4_TEST_EVERY_SECONDS"] = "$SnapshotAggH4EverySeconds"
-}
-if ($SnapshotAggD1EverySeconds -gt 0) {
-    $processEnv["SNAPSHOT_AGG_D1_TEST_EVERY_SECONDS"] = "$SnapshotAggD1EverySeconds"
-}
-if ($SnapshotAggMon1EverySeconds -gt 0) {
-    $processEnv["SNAPSHOT_AGG_MON1_TEST_EVERY_SECONDS"] = "$SnapshotAggMon1EverySeconds"
-}
-if ($SnapshotCleanupEverySeconds -gt 0) {
-    $processEnv["SNAPSHOT_CLEANUP_TEST_EVERY_SECONDS"] = "$SnapshotCleanupEverySeconds"
 }
 
 $records = @()
