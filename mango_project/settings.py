@@ -177,13 +177,6 @@ MARKET_CRYPTO_PULL_INTERVAL_MINUTES = int(os.getenv("MARKET_CRYPTO_PULL_INTERVAL
 MARKET_QUOTE_PROVIDER = os.getenv("MARKET_QUOTE_PROVIDER", "real").strip().lower()
 MARKET_INDEX_PROVIDER = os.getenv("MARKET_INDEX_PROVIDER", "yfinance").strip().lower()
 
-MARKET_SYNC_TEST_EVERY_SECONDS = int(os.getenv("MARKET_SYNC_TEST_EVERY_SECONDS", "0"))
-SNAPSHOT_CAPTURE_TEST_EVERY_SECONDS = int(os.getenv("SNAPSHOT_CAPTURE_TEST_EVERY_SECONDS", "0"))
-SNAPSHOT_AGG_H4_TEST_EVERY_SECONDS = int(os.getenv("SNAPSHOT_AGG_H4_TEST_EVERY_SECONDS", "0"))
-SNAPSHOT_AGG_D1_TEST_EVERY_SECONDS = int(os.getenv("SNAPSHOT_AGG_D1_TEST_EVERY_SECONDS", "0"))
-SNAPSHOT_AGG_MON1_TEST_EVERY_SECONDS = int(os.getenv("SNAPSHOT_AGG_MON1_TEST_EVERY_SECONDS", "0"))
-SNAPSHOT_CLEANUP_TEST_EVERY_SECONDS = int(os.getenv("SNAPSHOT_CLEANUP_TEST_EVERY_SECONDS", "0"))
-
 SNAPSHOT_AGG_H4_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_H4_CRON_MINUTE", "0"))
 SNAPSHOT_AGG_D1_CRON_HOUR = int(os.getenv("SNAPSHOT_AGG_D1_CRON_HOUR", "0"))
 SNAPSHOT_AGG_D1_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_D1_CRON_MINUTE", "0"))
@@ -193,12 +186,6 @@ SNAPSHOT_AGG_MON1_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_MON1_CRON_MINUTE", "
 SNAPSHOT_CLEANUP_CRON_HOUR = int(os.getenv("SNAPSHOT_CLEANUP_CRON_HOUR", "1"))
 SNAPSHOT_CLEANUP_CRON_MINUTE = int(os.getenv("SNAPSHOT_CLEANUP_CRON_MINUTE", "45"))
 CELERY_BEAT_MAX_LOOP_INTERVAL = int(os.getenv("CELERY_BEAT_MAX_LOOP_INTERVAL", "5"))
-
-
-def _schedule_with_test_seconds(default_cron, every_seconds: int):
-    if every_seconds and every_seconds > 0:
-        return float(every_seconds)
-    return default_cron
 
 
 # Celery 配置
@@ -211,54 +198,36 @@ CELERY_ENABLE_UTC = True
 CELERY_BEAT_SCHEDULE = {
     "pull-watchlist-quotes-every-5-minutes": {
         "task": "market.tasks.task_pull_watchlist_quotes",
-        "schedule": _schedule_with_test_seconds(
-            crontab(minute="*/5"),
-            MARKET_SYNC_TEST_EVERY_SECONDS,
-        ),
+        "schedule": crontab(minute="*/5"),
         "options": {"queue": "market_sync"},
     },
     "capture-snapshot-m15": {
         "task": "snapshot.tasks.task_capture_m15_snapshots",
-        "schedule": _schedule_with_test_seconds(
-            crontab(minute="*/15"),
-            SNAPSHOT_CAPTURE_TEST_EVERY_SECONDS,
-        ),
+        "schedule": crontab(minute="*/15"),
         "options": {"queue": "snapshot_capture"},
     },
     "aggregate-snapshot-h4": {
         "task": "snapshot.tasks.task_aggregate_h4_snapshots",
-        "schedule": _schedule_with_test_seconds(
-            crontab(minute=SNAPSHOT_AGG_H4_CRON_MINUTE, hour="*/4"),
-            SNAPSHOT_AGG_H4_TEST_EVERY_SECONDS,
-        ),
+        "schedule": crontab(minute=SNAPSHOT_AGG_H4_CRON_MINUTE, hour="*/4"),
         "options": {"queue": "snapshot_aggregate"},
     },
     "aggregate-snapshot-d1": {
         "task": "snapshot.tasks.task_aggregate_d1_snapshots",
-        "schedule": _schedule_with_test_seconds(
-            crontab(minute=SNAPSHOT_AGG_D1_CRON_MINUTE, hour=SNAPSHOT_AGG_D1_CRON_HOUR),
-            SNAPSHOT_AGG_D1_TEST_EVERY_SECONDS,
-        ),
+        "schedule": crontab(minute=SNAPSHOT_AGG_D1_CRON_MINUTE, hour=SNAPSHOT_AGG_D1_CRON_HOUR),
         "options": {"queue": "snapshot_aggregate"},
     },
     "aggregate-snapshot-mon1": {
         "task": "snapshot.tasks.task_aggregate_mon1_snapshots",
-        "schedule": _schedule_with_test_seconds(
-            crontab(
-                minute=SNAPSHOT_AGG_MON1_CRON_MINUTE,
-                hour=SNAPSHOT_AGG_MON1_CRON_HOUR,
-                day_of_month=SNAPSHOT_AGG_MON1_CRON_DAY,
-            ),
-            SNAPSHOT_AGG_MON1_TEST_EVERY_SECONDS,
+        "schedule": crontab(
+            minute=SNAPSHOT_AGG_MON1_CRON_MINUTE,
+            hour=SNAPSHOT_AGG_MON1_CRON_HOUR,
+            day_of_month=SNAPSHOT_AGG_MON1_CRON_DAY,
         ),
         "options": {"queue": "snapshot_aggregate"},
     },
     "cleanup-snapshot-history-daily": {
         "task": "snapshot.tasks.task_cleanup_snapshot_history",
-        "schedule": _schedule_with_test_seconds(
-            crontab(hour=SNAPSHOT_CLEANUP_CRON_HOUR, minute=SNAPSHOT_CLEANUP_CRON_MINUTE),
-            SNAPSHOT_CLEANUP_TEST_EVERY_SECONDS,
-        ),
+        "schedule": crontab(hour=SNAPSHOT_CLEANUP_CRON_HOUR, minute=SNAPSHOT_CLEANUP_CRON_MINUTE),
         "options": {"queue": "snapshot_cleanup"},
     },
 }

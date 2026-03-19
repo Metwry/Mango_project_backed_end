@@ -13,12 +13,6 @@ STATE_DIR="resource/tmp_celery_state"
 FOLLOW_LOGS="0"
 TAIL_LINES="50"
 FAKE_PROVIDER="0"
-MARKET_SYNC_EVERY_SECONDS="0"
-SNAPSHOT_CAPTURE_EVERY_SECONDS="0"
-SNAPSHOT_AGG_H4_EVERY_SECONDS="0"
-SNAPSHOT_AGG_D1_EVERY_SECONDS="0"
-SNAPSHOT_AGG_MON1_EVERY_SECONDS="0"
-SNAPSHOT_CLEANUP_EVERY_SECONDS="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -65,30 +59,6 @@ while [[ $# -gt 0 ]]; do
     --fake-provider)
       FAKE_PROVIDER="1"
       shift
-      ;;
-    --market-sync-every-seconds)
-      MARKET_SYNC_EVERY_SECONDS="$2"
-      shift 2
-      ;;
-    --snapshot-capture-every-seconds)
-      SNAPSHOT_CAPTURE_EVERY_SECONDS="$2"
-      shift 2
-      ;;
-    --snapshot-agg-h4-every-seconds)
-      SNAPSHOT_AGG_H4_EVERY_SECONDS="$2"
-      shift 2
-      ;;
-    --snapshot-agg-d1-every-seconds)
-      SNAPSHOT_AGG_D1_EVERY_SECONDS="$2"
-      shift 2
-      ;;
-    --snapshot-agg-mon1-every-seconds)
-      SNAPSHOT_AGG_MON1_EVERY_SECONDS="$2"
-      shift 2
-      ;;
-    --snapshot-cleanup-every-seconds)
-      SNAPSHOT_CLEANUP_EVERY_SECONDS="$2"
-      shift 2
       ;;
     *)
       echo "Unknown arg: $1" >&2
@@ -173,12 +143,6 @@ start_proc() {
   (
     cd "$PROJECT_ROOT" || exit 1
     [[ "$FAKE_PROVIDER" == "1" ]] && export MARKET_QUOTE_PROVIDER="fake"
-    [[ "$MARKET_SYNC_EVERY_SECONDS" != "0" ]] && export MARKET_SYNC_TEST_EVERY_SECONDS="$MARKET_SYNC_EVERY_SECONDS"
-    [[ "$SNAPSHOT_CAPTURE_EVERY_SECONDS" != "0" ]] && export SNAPSHOT_CAPTURE_TEST_EVERY_SECONDS="$SNAPSHOT_CAPTURE_EVERY_SECONDS"
-    [[ "$SNAPSHOT_AGG_H4_EVERY_SECONDS" != "0" ]] && export SNAPSHOT_AGG_H4_TEST_EVERY_SECONDS="$SNAPSHOT_AGG_H4_EVERY_SECONDS"
-    [[ "$SNAPSHOT_AGG_D1_EVERY_SECONDS" != "0" ]] && export SNAPSHOT_AGG_D1_TEST_EVERY_SECONDS="$SNAPSHOT_AGG_D1_EVERY_SECONDS"
-    [[ "$SNAPSHOT_AGG_MON1_EVERY_SECONDS" != "0" ]] && export SNAPSHOT_AGG_MON1_TEST_EVERY_SECONDS="$SNAPSHOT_AGG_MON1_EVERY_SECONDS"
-    [[ "$SNAPSHOT_CLEANUP_EVERY_SECONDS" != "0" ]] && export SNAPSHOT_CLEANUP_TEST_EVERY_SECONDS="$SNAPSHOT_CLEANUP_EVERY_SECONDS"
     exec "${PYTHON_BIN}" -m celery ${command} >"${logfile}" 2>&1
   ) &
   echo "$!"
