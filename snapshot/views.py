@@ -1,5 +1,4 @@
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -8,8 +7,6 @@ from .services.query_service import build_account_snapshot_query_result, build_p
 
 
 class AccountSnapshotQueryView(APIView):
-    permission_classes = [IsAuthenticated]
-
     # 查询账户维度的快照时间序列数据。
     def get(self, request, *args, **kwargs):
         serializer = AccountSnapshotQuerySerializer(data=request.query_params)
@@ -19,8 +16,6 @@ class AccountSnapshotQueryView(APIView):
 
 
 class PositionSnapshotQueryView(APIView):
-    permission_classes = [IsAuthenticated]
-
     # 查询持仓维度的快照时间序列数据。
     def get(self, request, *args, **kwargs):
         serializer = PositionSnapshotQuerySerializer(data=request.query_params)

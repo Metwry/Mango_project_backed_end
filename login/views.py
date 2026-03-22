@@ -1,6 +1,6 @@
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -28,7 +28,7 @@ class LoginView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    # 校验登录参数并返回 JWT 登录信息。
+    # ed 校验登录参数并返回 JWT 登录信息。
     def post(self, request, *args, **kwargs):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -40,7 +40,7 @@ class SendRegisterEmailCodeView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    # 向注册邮箱发送验证码。
+    # ed 向注册邮箱发送验证码。
     def post(self, request, *args, **kwargs):
         serializer = SendRegisterEmailCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -52,7 +52,7 @@ class EmailRegisterView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    # 使用邮箱、密码和验证码完成注册。
+    # ed 使用邮箱、密码和验证码完成注册。
     def post(self, request, *args, **kwargs):
         serializer = EmailRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -70,7 +70,7 @@ class SendPasswordResetEmailCodeView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    # 向找回密码邮箱发送验证码。
+    # ed 向找回密码邮箱发送验证码。
     def post(self, request, *args, **kwargs):
         serializer = SendPasswordResetEmailCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -82,7 +82,7 @@ class PasswordResetView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    # 使用邮箱验证码重置用户密码。
+    # ed 使用邮箱验证码重置用户密码。
     def post(self, request, *args, **kwargs):
         serializer = PasswordResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -97,9 +97,7 @@ class PasswordResetView(APIView):
 
 
 class UpdateUsernameView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    # 修改当前登录用户的用户名。
+    # ed 修改当前登录用户的用户名。
     def patch(self, request, *args, **kwargs):
         serializer = UpdateUsernameSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

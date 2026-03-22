@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from common.utils.code_utils import normalize_code
+from common.utils import normalize_code
 
 from .models import Instrument
 
@@ -12,7 +12,7 @@ class InstrumentSearchItemSerializer(serializers.ModelSerializer):
         fields = ["instrument_id", "symbol", "short_code", "name", "market"]
 
 
-class MarketInstrumentSearchQuerySerializer(serializers.Serializer):
+class InstrumentSearchQuerySerializer(serializers.Serializer):
     q = serializers.CharField(required=False, allow_blank=True)
     keyword = serializers.CharField(required=False, allow_blank=True)
     limit = serializers.CharField(required=False, allow_blank=True)
@@ -31,7 +31,7 @@ class MarketInstrumentSearchQuerySerializer(serializers.Serializer):
         return attrs
 
 
-class MarketLatestQuoteItemInputSerializer(serializers.Serializer):
+class LatestQuoteItemInputSerializer(serializers.Serializer):
     market = serializers.CharField()
     short_code = serializers.CharField()
 
@@ -50,8 +50,8 @@ class MarketLatestQuoteItemInputSerializer(serializers.Serializer):
         return short_code
 
 
-class MarketLatestQuoteBatchSerializer(serializers.Serializer):
-    items = MarketLatestQuoteItemInputSerializer(many=True, allow_empty=False)
+class LatestQuoteBatchSerializer(serializers.Serializer):
+    items = LatestQuoteItemInputSerializer(many=True, allow_empty=False)
 
     # 限制批量查询的标的数量，避免单次请求过大。
     def validate_items(self, value):

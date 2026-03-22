@@ -181,7 +181,7 @@
 
 覆盖链路：
 
-- `market.tasks.task_pull_watchlist_quotes`
+- `market.tasks.task_pull_data`
 - `snapshot.tasks.task_capture_m15_snapshots`
 - `snapshot.tasks.task_aggregate_h4_snapshots`
 - `snapshot.tasks.task_aggregate_d1_snapshots`

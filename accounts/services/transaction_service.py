@@ -6,7 +6,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 
 from accounts.models import Accounts, Transaction, is_system_investment_account
 from investment.models import InvestmentRecord
-from common.utils.decimal_utils import quantize_decimal
+from common.utils import quantize_decimal
 
 from .currency_service import convert_amount_or_raise
 

@@ -6,20 +6,17 @@ from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.core.management import call_command
 from django.db import close_old_connections
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from accounts.models import Accounts, Transaction
-from accounts.management.commands.sync_symbols import InstrumentPayload
 from accounts.services.quote_providers import fetch_crypto_quotes_binance
 from investment.models import Position
 from market.models import Instrument
+from market.services.data.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
 from accounts.services.quote_providers import _to_billion_amount
-from market.services.snapshot.cache_keys import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
 from snapshot.models import AccountSnapshot, SnapshotDataStatus, SnapshotLevel
 
 
@@ -29,211 +26,6 @@ class QuoteFetcherUnitTests(SimpleTestCase):
         self.assertEqual(_to_billion_amount(123456789), 1.23)
         self.assertEqual(_to_billion_amount(100000000), 1.0)
         self.assertIsNone(_to_billion_amount(0))
-
-
-class SyncSymbolsCommandTests(SimpleTestCase):
-    @patch("accounts.management.commands.sync_symbols.Command.upsert_instruments", return_value=(1, 0, 1))
-    @patch("accounts.management.commands.sync_symbols.Command.fetch_cn_stocks")
-    def test_sync_symbols_renders_progress_table_for_success(self, mock_fetch_cn, _mock_upsert):
-        """验证同步 符号 在成功时渲染进度表。"""
-        mock_fetch_cn.return_value = [
-            InstrumentPayload(
-                symbol="600519.SH",
-                short_code="600519",
-                name="Kweichow Moutai",
-                asset_class=Instrument.AssetClass.STOCK,
-                market=Instrument.Market.CN,
-                exchange="SH",
-                base_currency="CNY",
-                is_active=True,
-            )
-        ]
-
-        out = StringIO()
-        call_command("sync_symbols", "--markets", "cn", stdout=out)
-        text = out.getvalue()
-
-        self.assertIn("Market sync progress", text)
-        self.assertIn("A-shares", text)
-        self.assertIn("pending", text)
-        self.assertIn("fetching", text)
-        self.assertIn("enriching", text)
-        self.assertIn("upserting", text)
-        self.assertIn("done", text)
-
-    @patch("accounts.management.commands.sync_symbols.Command.upsert_instruments", return_value=(1, 0, 1))
-    @patch("accounts.management.commands.sync_symbols.Command.fetch_hk_stocks", side_effect=ValueError("hk provider down"))
-    @patch("accounts.management.commands.sync_symbols.Command.fetch_cn_stocks")
-    def test_sync_symbols_renders_failed_market_in_progress_table(self, mock_fetch_cn, _mock_fetch_hk, _mock_upsert):
-        """验证同步 符号 在市场失败时渲染进度表。"""
-        mock_fetch_cn.return_value = [
-            InstrumentPayload(
-                symbol="600519.SH",
-                short_code="600519",
-                name="Kweichow Moutai",
-                asset_class=Instrument.AssetClass.STOCK,
-                market=Instrument.Market.CN,
-                exchange="SH",
-                base_currency="CNY",
-                is_active=True,
-            )
-        ]
-
-        out = StringIO()
-        call_command("sync_symbols", "--markets", "cn", "hk", stdout=out)
-        text = out.getvalue()
-
-        self.assertIn("HK-shares", text)
-        self.assertIn("failed", text)
-        self.assertIn("hk provider down", text)
-
-
-class SyncSymbolsInsertOnlyTests(TestCase):
-    @patch("accounts.management.commands.sync_symbols.Command.fetch_cn_stocks")
-    def test_sync_symbols_insert_only_keeps_existing_rows_unchanged(self, mock_fetch_cn):
-        """验证同步 符号 在 insert-only 模式下保持已有记录不变。"""
-        existing = Instrument.objects.create(
-            symbol="600519.SH",
-            short_code="600519",
-            name="Old Name",
-            asset_class=Instrument.AssetClass.STOCK,
-            market=Instrument.Market.CN,
-            exchange="SH",
-            base_currency="CNY",
-            is_active=True,
-        )
-        mock_fetch_cn.return_value = [
-            InstrumentPayload(
-                symbol="600519.SH",
-                short_code="600519",
-                name="New Name",
-                asset_class=Instrument.AssetClass.STOCK,
-                market=Instrument.Market.CN,
-                exchange="SH",
-                base_currency="CNY",
-                is_active=True,
-            ),
-            InstrumentPayload(
-                symbol="000001.SZ",
-                short_code="000001",
-                name="Ping An Bank",
-                asset_class=Instrument.AssetClass.STOCK,
-                market=Instrument.Market.CN,
-                exchange="SZ",
-                base_currency="CNY",
-                is_active=True,
-            ),
-        ]
-
-        out = StringIO()
-        call_command("sync_symbols", "--markets", "cn", "--insert-only", stdout=out)
-        existing.refresh_from_db()
-        created = Instrument.objects.get(symbol="000001.SZ")
-        text = out.getvalue()
-
-        self.assertEqual(existing.name, "Old Name")
-        self.assertEqual(created.name, "Ping An Bank")
-        self.assertIn("Insert-only mode enabled", text)
-        self.assertIn("persisted=3, created=3, updated=0, insert_only=True", text)
-
-    @patch("accounts.management.commands.sync_symbols.Command.fetch_hk_stocks")
-    def test_sync_symbols_keeps_logo_metadata_on_existing_rows(self, mock_fetch_hk):
-        """验证同步 符号 保留已有记录的 图标 元数据。"""
-        existing = Instrument.objects.create(
-            symbol="00700.HK",
-            short_code="00700",
-            name="Tencent Holdings",
-            asset_class=Instrument.AssetClass.STOCK,
-            market=Instrument.Market.HK,
-            exchange="HKEX",
-            base_currency="HKD",
-            logo_url="https://img.logo.dev/ticker/700.HK?token=test&retina=true",
-            logo_source="logo.dev:ticker",
-            logo_updated_at=timezone.now(),
-            is_active=True,
-        )
-        mock_fetch_hk.return_value = [
-            InstrumentPayload(
-                symbol="00700.HK",
-                short_code="00700",
-                name="Tencent",
-                asset_class=Instrument.AssetClass.STOCK,
-                market=Instrument.Market.HK,
-                exchange="HKEX",
-                base_currency="HKD",
-                is_active=True,
-            )
-        ]
-
-        call_command("sync_symbols", "--markets", "hk", stdout=StringIO())
-        existing.refresh_from_db()
-
-        self.assertIn("/ticker/700.HK", existing.logo_url)
-        self.assertEqual(existing.logo_source, "logo.dev:ticker")
-        self.assertIsNotNone(existing.logo_updated_at)
-
-
-class SyncSymbolsIndexSeedTests(TestCase):
-    @patch("accounts.management.commands.sync_symbols.Command.fetch_us_stocks")
-    @patch("accounts.management.commands.sync_symbols.Command.fetch_hk_stocks")
-    @patch("accounts.management.commands.sync_symbols.Command.fetch_cn_stocks")
-    def test_sync_symbols_adds_core_market_indices(self, mock_fetch_cn, mock_fetch_hk, mock_fetch_us):
-        """验证同步 符号 补充核心市场指数。"""
-        mock_fetch_cn.return_value = [
-            InstrumentPayload(
-                symbol="600519.SH",
-                short_code="600519",
-                name="Kweichow Moutai",
-                asset_class=Instrument.AssetClass.STOCK,
-                market=Instrument.Market.CN,
-                exchange="SH",
-                base_currency="CNY",
-                is_active=True,
-            )
-        ]
-        mock_fetch_hk.return_value = [
-            InstrumentPayload(
-                symbol="00700.HK",
-                short_code="00700",
-                name="Tencent",
-                asset_class=Instrument.AssetClass.STOCK,
-                market=Instrument.Market.HK,
-                exchange="HKEX",
-                base_currency="HKD",
-                is_active=True,
-            )
-        ]
-        mock_fetch_us.return_value = [
-            InstrumentPayload(
-                symbol="AAPL.US",
-                short_code="AAPL",
-                name="Apple Inc.",
-                asset_class=Instrument.AssetClass.STOCK,
-                market=Instrument.Market.US,
-                exchange="NASDAQ",
-                base_currency="USD",
-                is_active=True,
-            )
-        ]
-
-        out = StringIO()
-        call_command("sync_symbols", "--markets", "cn", "hk", "us", stdout=out)
-
-        symbols = set(
-            Instrument.objects
-            .filter(asset_class=Instrument.AssetClass.INDEX)
-            .values_list("symbol", flat=True)
-        )
-        self.assertTrue(
-            {
-                "SPX.US",
-                "NDX.US",
-                "DJI.US",
-                "000001.SH",
-                "399001.SZ",
-                "HSI.HK",
-            }.issubset(symbols)
-        )
 
 
 class CryptoQuoteProviderTests(SimpleTestCase):

@@ -7,17 +7,20 @@ from typing import Any
 
 from django.db import transaction
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 
 from accounts.models import Accounts, is_system_investment_account
 from investment.models import Position
-from market.services.snapshot.fx_rate import get_fx_rates
-from market.services.snapshot.quote_store import build_quote_index, get_snapshot_payload
-from common.constants.market import market_currency
-from common.fx.rates import normalize_usd_rates
-from common.time.buckets import floor_bucket
-from common.utils.code_utils import normalize_code, strip_market_suffix
-from common.utils.decimal_utils import quantize_decimal, to_decimal
+from market.services.data.quote_cache import build_quote_index, get_market_data_payload
+from market.services.data.rates import get_fx_rates
+from common.utils import (
+    floor_bucket,
+    market_currency,
+    normalize_code,
+    normalize_usd_rates,
+    quantize_decimal,
+    strip_market_suffix,
+    to_decimal,
+)
 
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
 
@@ -123,31 +126,14 @@ def _quote_price(quote_row: dict[str, Any] | None) -> Decimal | None:
     return value
 
 
-# 解析行情更新时间，用于写入持仓快照中的 price_time。
-def _quote_time(quote_row: dict[str, Any] | None, default_ts: str | None) -> timezone.datetime | None:
-    raw = None
-    if isinstance(quote_row, dict):
-        raw = quote_row.get("updated_at") or quote_row.get("time")
-    raw = raw or default_ts
-    if not raw:
-        return None
-    dt = parse_datetime(str(raw))
-    if dt is None:
-        return None
-    if timezone.is_naive(dt):
-        dt = timezone.make_aware(dt, dt_timezone.utc)
-    return dt
-
-
 # 采集当前账户与持仓快照，并写入最细粒度快照表。
 def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> dict[str, int | str]:
     snapshot_level = str(level or SnapshotLevel.M15)
     snapshot_at = _align_snapshot_time(snapshot_time, snapshot_level)
 
     usd_rates, _ = _load_usd_rates()
-    payload = get_snapshot_payload()
+    payload = get_market_data_payload()
     quote_index = build_quote_index(payload)
-    quote_default_ts = payload.get("updated_at") if isinstance(payload, dict) else None
 
     active_accounts = list(
         Accounts.objects.filter(status=Accounts.Status.ACTIVE).only("id", "user_id", "type", "currency", "balance")
@@ -190,7 +176,6 @@ def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> 
             short_code = normalize_code(position.instrument.short_code) or strip_market_suffix(position.instrument.symbol)
             quote_row = quote_index.get((market, short_code))
             price = _quote_price(quote_row)
-            price_time = _quote_time(quote_row, quote_default_ts)
             currency = _position_currency(position)
 
             quantity = _q_amount(position.quantity or ZERO)
@@ -230,7 +215,6 @@ def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> 
                     "market_value_usd": market_value_usd,
                     "fx_rate_to_usd": fx_rate_to_usd,
                     "realized_pnl": realized_pnl,
-                    "price_time": price_time,
                     "currency": currency,
                     "data_status": status,
                 },
@@ -419,7 +403,6 @@ def aggregate_snapshots(*, level: str, snapshot_time=None) -> dict[str, int | st
                     "market_value_usd": source.market_value_usd,
                     "fx_rate_to_usd": source.fx_rate_to_usd,
                     "realized_pnl": source.realized_pnl,
-                    "price_time": source.price_time,
                     "currency": source.currency,
                     "data_status": source.data_status,
                 },

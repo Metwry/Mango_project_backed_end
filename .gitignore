@@ -5,19 +5,17 @@ __pycache__/
 
 .env
 docs/
-Design/
 
 .idea/
 .vscode/
-
-tmp_stress_logs/
-tmp_celery_state/
-celerybeat-schedule*
-logo_downloads/
 
 *.log
 *.sqlite3
 .DS_Store
 
-tmp_celery_logs/
-test/k6/
+
+resource/tmp_stress_logs/
+resource/tmp_celery_state/
+resource/**/celerybeat-schedule*
+resource/logo_downloads/
+resource/test

@@ -90,6 +90,9 @@ class Accounts(models.Model):
     class Meta:
         # 数据库物理表名。
         db_table = "accounts"
+        # Django Admin 展示名称。
+        verbose_name = "账户"
+        verbose_name_plural = "账户"
         # 默认按最近更新时间倒序返回。
         ordering = ["-updated_at"]
         # 限制同一用户下，账户名 + 类型 + 币种不能重复。
@@ -203,6 +206,9 @@ class Transaction(models.Model):
     class Meta:
         # 数据库物理表名。
         db_table = "accounts_transaction"
+        # Django Admin 展示名称。
+        verbose_name = "交易流水"
+        verbose_name_plural = "交易流水"
         # 默认按创建时间和主键倒序，保证最新流水优先展示。
         ordering = ["-created_at", "-id"]
         # 优化按用户、账户维度拉取最近流水的查询。

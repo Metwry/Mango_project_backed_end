@@ -1,14 +1,13 @@
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from common.utils.code_utils import normalize_code
+from common.utils import normalize_code
 
 from .serializers import (
+    InstrumentSearchQuerySerializer,
     InstrumentSearchItemSerializer,
-    MarketInstrumentSearchQuerySerializer,
-    MarketLatestQuoteBatchSerializer,
+    LatestQuoteBatchSerializer,
 )
 from .services.api.service import (
     add_watchlist_symbol,
@@ -17,20 +16,16 @@ from .services.api.service import (
     delete_watchlist_symbol,
     search_instruments,
 )
-from .services.index.quote import build_market_indices_snapshot
-from .services.snapshot.fx_rate import get_fx_rates
+from .services.data.indices import pull_indices
+from .services.data.rates import get_fx_rates
 
 class MarketsView(APIView):
-    permission_classes = [IsAuthenticated]
-
     # ed 返回当前用户自选市场的最新行情数据。
     def get(self, request, *args, **kwargs):
         return Response(build_user_markets_snapshot(request.user), status=status.HTTP_200_OK)
 
 
 class MarketFxRatesView(APIView):
-    permission_classes = [IsAuthenticated]
-
     # ed 返回指定基准货币对应的汇率行情数据。
     def get(self, request, *args, **kwargs):
         try:
@@ -44,11 +39,9 @@ class MarketFxRatesView(APIView):
 
 
 class MarketInstrumentSearchView(APIView):
-    permission_classes = [IsAuthenticated]
-
     # ed 根据关键词搜索可交易标的。
     def get(self, request, *args, **kwargs):
-        params = MarketInstrumentSearchQuerySerializer(data=request.query_params)
+        params = InstrumentSearchQuerySerializer(data=request.query_params)
         params.is_valid(raise_exception=True)
 
         if not params.validated_data["query"]:
@@ -63,27 +56,21 @@ class MarketInstrumentSearchView(APIView):
 
 
 class MarketLatestQuoteBatchView(APIView):
-    permission_classes = [IsAuthenticated]
-
     # ed 批量返回持仓标的的最新价格数据。
     def post(self, request, *args, **kwargs):
-        serializer = MarketLatestQuoteBatchSerializer(data=request.data)
+        serializer = LatestQuoteBatchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         quotes = build_latest_quotes(serializer.validated_data["items"])
         return Response({"quotes": quotes}, status=status.HTTP_200_OK)
 
 
 class MarketIndexSnapshotView(APIView):
-    permission_classes = [IsAuthenticated]
-
     # ed 返回核心指数行情快照。
     def get(self, request, *args, **kwargs):
-        return Response(build_market_indices_snapshot(), status=status.HTTP_200_OK)
+        return Response(pull_indices(), status=status.HTTP_200_OK)
 
 
 class MarketWatchlistAddView(APIView):
-    permission_classes = [IsAuthenticated]
-
     # ed 将指定标的加入当前用户自选。
     def post(self, request, *args, **kwargs):
         symbol = str(request.data.get("symbol") or "").strip()

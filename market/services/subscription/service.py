@@ -1,7 +1,7 @@
 from django.db import transaction
 
 from ...models import UserInstrumentSubscription
-from common.utils.code_utils import normalize_code, resolve_short_code
+from common.utils import normalize_code, resolve_short_code
 
 SOURCE_POSITION = "position"
 SOURCE_WATCHLIST = "watchlist"

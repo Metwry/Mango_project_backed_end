@@ -2,7 +2,6 @@ from django_filters import rest_framework as filters
 from rest_framework import filters as drf_filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import Transaction
@@ -24,7 +23,6 @@ from .serializers import AccountSerializer, TransactionDeleteQuerySerializer, Tr
 
 class AccountViewSet(viewsets.ModelViewSet):
     serializer_class = AccountSerializer
-    permission_classes = [IsAuthenticated]
 
     # 返回当前用户的账户列表，并按请求参数决定是否包含已归档账户。
     def get_queryset(self):
@@ -64,7 +62,6 @@ class TransactionFilter(filters.FilterSet):
 
 class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
-    permission_classes = [IsAuthenticated]
     pagination_class = TransactionPagination
 
     filter_backends = [filters.DjangoFilterBackend, drf_filters.OrderingFilter]

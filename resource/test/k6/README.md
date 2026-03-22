@@ -32,8 +32,8 @@ All authenticated scripts require:
 - `USERNAME` or `EMAIL`
 - `PASSWORD`
 
-If `EMAIL` is set, the shared login helper will send `{"email": "...", "password": "..."}`.
-Otherwise it will send `{"username": "...", "password": "..."}`.
+The shared login helper always sends `{"username": "...", "password": "..."}`.
+If `EMAIL` is set, its value is passed through the `username` field.
 
 `p0_funds.js` also requires:
 

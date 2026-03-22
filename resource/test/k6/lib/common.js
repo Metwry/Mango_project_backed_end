@@ -108,11 +108,8 @@ export function login() {
     fail('Provide USERNAME or EMAIL for authenticated k6 scenarios.');
   }
 
-  const body = __ENV.EMAIL
-    ? { email: __ENV.EMAIL, password }
-    : { username: __ENV.USERNAME, password };
   const response = request('POST', '/api/login/', {
-    body,
+    body: { username: identifier, password },
     tags: { name: 'login' },
   });
   const ok = check(response, {
