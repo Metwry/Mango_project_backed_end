@@ -10,9 +10,8 @@ from django.utils import timezone
 
 from accounts.models import Accounts, is_system_investment_account
 from investment.models import Position
-from market.services.snapshot.fx_rate import get_fx_rates
-from common.constants.market import market_currency
-from common.time.buckets import floor_bucket
+from market.services.data.rates import get_fx_rates
+from common.utils import floor_bucket, market_currency
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
 from snapshot.services.snapshot_service import cleanup_expired_snapshots
 
@@ -262,7 +261,6 @@ class Command(BaseCommand):
                                 market_value_usd=market_value_usd,
                                 fx_rate_to_usd=fx_rate,
                                 realized_pnl=realized_pnl,
-                                price_time=ts,
                                 currency=ccy,
                                 data_status=row_status,
                             )
@@ -345,7 +343,6 @@ class Command(BaseCommand):
                         "market_value_usd",
                         "fx_rate_to_usd",
                         "realized_pnl",
-                        "price_time",
                         "currency",
                         "data_status",
                     ],

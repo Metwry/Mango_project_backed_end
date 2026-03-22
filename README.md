@@ -20,7 +20,7 @@ Mango Backend 是 Mango Finance 的后端服务，基于 Django + Django REST Fr
 - PostgreSQL
 - Redis
 - Celery
-- yfinance / akshare / pandas-market-calendars
+- yfinance / akshare / exchange-calendars
 
 ### 3. 核心业务模块
 
@@ -43,7 +43,7 @@ Mango Backend 是 Mango Finance 的后端服务，基于 Django + Django REST Fr
 |-- snapshot/        快照采集与查询
 |-- common/          公共基础设施
 |-- docs/            项目文档与维护手册
-|-- resource/data/   静态市场日历数据
+|-- resource/data/   运行期静态资源
 |-- resource/scripts/ 启动、停止和安装脚本
 |-- resource/deploy/  部署模板文件
 |-- resource/test/    压测与测试资源
@@ -71,7 +71,7 @@ python manage.py runserver
 后台任务建议单独启动：
 
 ```bash
-celery -A mango_project worker -l info
+celery -A mango_project worker -Q market_sync,snapshot_capture,snapshot_aggregate,snapshot_cleanup -l info
 celery -A mango_project beat -l info
 ```
 
@@ -79,7 +79,7 @@ celery -A mango_project beat -l info
 
 ### 7. 定时任务
 
-- 自选行情补拉：`market.tasks.task_pull_watchlist_quotes`
+- 市场数据拉取：`market.tasks.task_pull_data`
 - 15 分钟快照采集：`snapshot.tasks.task_capture_m15_snapshots`
 - H4 / D1 / MON1 聚合：`snapshot.tasks.task_aggregate_*`
 - 历史快照清理：`snapshot.tasks.task_cleanup_snapshot_history`
@@ -116,7 +116,7 @@ Mango Backend is the API service behind Mango Finance. It is built with Django a
 - PostgreSQL
 - Redis
 - Celery
-- yfinance / akshare / pandas-market-calendars
+- yfinance / akshare / exchange-calendars
 
 ### 3. Core Domains
 

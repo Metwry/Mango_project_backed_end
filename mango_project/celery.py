@@ -30,7 +30,7 @@ def trigger_startup_pull(sender=None, **kwargs):
             log_info(logger, "worker.startup.pull.skipped", reason="lock_exists")
             return
 
-        app.send_task("market.tasks.task_pull_watchlist_quotes")
+        app.send_task("market.tasks.task_pull_data")
         logger.warning("worker 启动完成，已立即触发一次行情补拉任务")
     except Exception:
         logger.exception("worker 启动补拉触发失败")

@@ -10,9 +10,9 @@ from django.test import TestCase, override_settings
 from accounts.models import Accounts, Currency
 from investment.models import Position
 from market.models import Instrument, UserInstrumentSubscription
-from market.services.snapshot.cache_keys import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
-from market.services.snapshot.calendar_guard import GuardDecision
-from market.services.snapshot.sync import sync_watchlist_snapshot
+from market.services.data.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.data.market import pull_market
+from market.services.data.pull_guard import GuardDecision
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
 from snapshot.services.snapshot_service import capture_snapshots
 
@@ -40,14 +40,12 @@ class MarketSnapshotIntegrationTests(TestCase):
             is_active=True,
         )
 
-    @patch("market.services.snapshot.sync._need_refresh_fx_rates", return_value=False)
-    @patch("market.services.snapshot.sync.pull_watchlist_quotes")
-    @patch("market.services.snapshot.sync.resolve_due_markets")
+    @patch("market.services.data.market.pull_watchlist_quotes")
+    @patch("market.services.data.market.resolve_due_markets")
     def test_sync_watchlist_snapshot_revalues_investment_account_balance(
         self,
         mock_resolve_due,
         mock_pull_quotes,
-        _mock_need_refresh_fx,
     ):
         """验证sync watchlist snapshot 会重估投资账户余额。"""
         investment_account = Accounts.objects.create(
@@ -101,19 +99,17 @@ class MarketSnapshotIntegrationTests(TestCase):
             ]
         }
 
-        sync_watchlist_snapshot()
+        pull_market()
 
         investment_account.refresh_from_db()
         self.assertEqual(investment_account.balance, Decimal("200.00"))
 
-    @patch("market.services.snapshot.sync._need_refresh_fx_rates", return_value=False)
-    @patch("market.services.snapshot.sync.pull_watchlist_quotes")
-    @patch("market.services.snapshot.sync.resolve_due_markets")
+    @patch("market.services.data.market.pull_watchlist_quotes")
+    @patch("market.services.data.market.resolve_due_markets")
     def test_sync_then_capture_m15_writes_position_and_account_snapshots(
         self,
         mock_resolve_due,
         mock_pull_quotes,
-        _mock_need_refresh_fx,
     ):
         """验证sync then capture m15 会写入持仓和账户快照。"""
         investment_account = Accounts.objects.create(
@@ -157,7 +153,7 @@ class MarketSnapshotIntegrationTests(TestCase):
                 }
             ]
         }
-        sync_watchlist_snapshot()
+        pull_market()
 
         # Avoid fx service fallback network call inside capture_snapshots.
         cache.set(

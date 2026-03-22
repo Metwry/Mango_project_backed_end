@@ -24,15 +24,13 @@ def password_reset_code_cache_key(email: str) -> str:
 
 # 校验邮箱尚未注册，用于注册流程。
 def ensure_email_not_registered(email: str) -> None:
-    user_model = get_user_model()
-    if user_model.objects.filter(email__iexact=email).exists():
+    if get_user_model().objects.filter(email__iexact=email).exists():
         raise ValueError("该邮箱已注册")
 
 
 # 校验邮箱已经注册，用于找回密码流程。
 def ensure_email_registered(email: str) -> None:
-    user_model = get_user_model()
-    if not user_model.objects.filter(email__iexact=email).exists():
+    if not get_user_model().objects.filter(email__iexact=email).exists():
         raise ValueError("该邮箱未注册")
 
 
@@ -99,17 +97,11 @@ def verify_register_email_code(email: str, code: str) -> None:
 def verify_password_reset_email_code(email: str, code: str) -> None:
     _verify_email_code(cache_key=password_reset_code_cache_key(email), code=code)
 
-
-# 删除指定缓存键对应的邮箱验证码。
-def _clear_email_code(cache_key: str) -> None:
-    cache.delete(cache_key)
-
-
 # 清理注册流程验证码缓存。
 def clear_register_email_code(email: str) -> None:
-    _clear_email_code(email_code_cache_key(email))
+    cache.delete(email_code_cache_key(email))
 
 
 # 清理重置密码流程验证码缓存。
 def clear_password_reset_email_code(email: str) -> None:
-    _clear_email_code(password_reset_code_cache_key(email))
+    cache.delete(password_reset_code_cache_key(email))

@@ -3,7 +3,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
-from common.db.constraints import check_constraint
+from common.utils import check_constraint
 
 
 class Instrument(models.Model):
@@ -140,6 +140,9 @@ class UserInstrumentSubscription(models.Model):
     class Meta:
         # 数据库物理表名。
         db_table = "market_user_instrument_subscription"
+        # Django Admin 展示名称。
+        verbose_name = "标的订阅"
+        verbose_name_plural = "标的订阅"
         # 唯一约束和检查约束共同维护订阅来源的自洽性。
         constraints = [
             models.UniqueConstraint(fields=["user", "instrument"], name="uniq_user_instrument_subscription"),

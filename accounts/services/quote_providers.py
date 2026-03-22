@@ -7,12 +7,19 @@ import time as time_mod
 import urllib.parse
 import hashlib
 from dataclasses import asdict, dataclass
-from datetime import datetime, time, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
-from zoneinfo import ZoneInfo
 
 import requests
 from django.conf import settings
+from market.services.data.utils import (
+    MARKET_CN,
+    MARKET_CRYPTO,
+    MARKET_FX,
+    MARKET_HK,
+    MARKET_US,
+    should_fetch_market,
+)
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import pandas as pd
@@ -23,12 +30,6 @@ except Exception:
     yf = None
 
 logger = logging.getLogger(__name__)
-
-MARKET_CRYPTO = "CRYPTO"
-MARKET_CN = "CN"
-MARKET_HK = "HK"
-MARKET_US = "US"
-MARKET_FX = "FX"
 
 # --- 代理配置 ---
 PROXY_PORT = 7897
@@ -107,35 +108,6 @@ def _get_binance_supported_symbols(*, timeout: float = 10.0) -> set[str] | None:
     }
     _BINANCE_SUPPORTED_SYMBOLS_CACHE = (now_monotonic, supported)
     return supported
-
-
-# 判断本地时间是否为工作日。
-def _is_weekday(dt_local: datetime) -> bool:
-    return dt_local.weekday() < 5
-
-
-# 根据市场和当前 UTC 时间判断是否处于应抓取行情的时段。
-def should_fetch_market(market: str, now_utc: Optional[datetime] = None) -> bool:
-    now_utc = now_utc or datetime.now(timezone.utc)
-    if market == MARKET_CRYPTO: return True
-    if market == MARKET_US:
-        dt = now_utc.astimezone(ZoneInfo("America/New_York"))
-        if not _is_weekday(dt): return False
-        return time(9, 30) <= dt.time() <= time(16, 0)
-    if market == MARKET_CN:
-        dt = now_utc.astimezone(ZoneInfo("Asia/Shanghai"))
-        if not _is_weekday(dt): return False
-        t = dt.time()
-        return (time(9, 30) <= t <= time(11, 30)) or (time(13, 0) <= t <= time(15, 0))
-    if market == MARKET_HK:
-        dt = now_utc.astimezone(ZoneInfo("Asia/Hong_Kong"))
-        if not _is_weekday(dt): return False
-        t = dt.time()
-        return (time(9, 30) <= t <= time(12, 0)) or (time(13, 0) <= t <= time(16, 0))
-    if market == MARKET_FX:
-        dt = now_utc.astimezone(ZoneInfo("UTC"))
-        return _is_weekday(dt)
-    return False
 
 
 # ==================== 股票市场 (新浪直连) ====================

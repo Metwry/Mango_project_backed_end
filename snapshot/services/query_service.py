@@ -1,7 +1,6 @@
 from datetime import timezone as dt_timezone
 
-from common.time.buckets import build_bucket_axis
-from common.utils.decimal_utils import trim_decimal_str
+from common.utils import build_bucket_axis, format_decimal_str
 
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotLevel
 
@@ -102,7 +101,7 @@ def build_account_snapshot_query_result(*, user, params: dict) -> dict:
         idx = bucket_index.get(ts)
         if idx is None:
             continue
-        series["balance_usd"][idx] = trim_decimal_str(row.balance_usd)
+        series["balance_usd"][idx] = format_decimal_str(row.balance_usd)
         series["data_status"][idx] = row.data_status
 
     return {
@@ -178,8 +177,8 @@ def build_position_snapshot_query_result(*, user, params: dict) -> dict:
         idx = bucket_index.get(ts)
         if idx is None:
             continue
-        series["market_price"][idx] = trim_decimal_str(row.market_price) if row.market_price is not None else None
-        series["market_value"][idx] = trim_decimal_str(row.market_value) if row.market_value is not None else None
+        series["market_price"][idx] = format_decimal_str(row.market_price) if row.market_price is not None else None
+        series["market_value"][idx] = format_decimal_str(row.market_value) if row.market_value is not None else None
         series["data_status"][idx] = row.data_status
 
     return {

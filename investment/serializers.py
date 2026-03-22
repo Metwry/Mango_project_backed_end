@@ -2,14 +2,21 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from common.utils.datetime_utils import normalize_datetime_to_utc
-from common.utils.decimal_utils import quantize_decimal, trim_decimal_str
+
+from common.utils import format_decimal_str, normalize_datetime_to_utc, quantize_decimal
 
 from .models import InvestmentRecord, Position
-from .services.trade_service import POSITION_ZERO
 
 
-class InvestmentTradeSerializer(serializers.Serializer):
+
+
+class FormattedDecimalField(serializers.Field):
+    # 将 Decimal 值统一格式化为接口展示字符串。
+    def to_representation(self, value):
+        return format_decimal_str(value if value is not None else Decimal("0"))
+
+
+class TradeSerializer(serializers.Serializer):
     instrument_id = serializers.IntegerField(min_value=1)
     quantity = serializers.DecimalField(
         max_digits=20,
@@ -30,9 +37,9 @@ class PositionListItemSerializer(serializers.ModelSerializer):
     short_code = serializers.CharField(source="instrument.short_code")
     name = serializers.CharField(source="instrument.name")
     market_type = serializers.CharField(source="instrument.market")
-    current_cost_price = serializers.SerializerMethodField()
-    current_quantity = serializers.SerializerMethodField()
-    current_value = serializers.SerializerMethodField()
+    current_cost_price = FormattedDecimalField(source="avg_cost", read_only=True)
+    current_quantity = FormattedDecimalField(source="quantity", read_only=True)
+    current_value = FormattedDecimalField(source="cost_total", read_only=True)
 
     class Meta:
         model = Position
@@ -46,23 +53,8 @@ class PositionListItemSerializer(serializers.ModelSerializer):
             "current_value",
         ]
 
-    # 返回持仓当前成本价的字符串展示值。
-    @staticmethod
-    def get_current_cost_price(obj: Position) -> str:
-        return trim_decimal_str(obj.avg_cost or POSITION_ZERO)
 
-    # 返回持仓当前数量的字符串展示值。
-    @staticmethod
-    def get_current_quantity(obj: Position) -> str:
-        return trim_decimal_str(obj.quantity or POSITION_ZERO)
-
-    # 返回持仓当前成本总额的字符串展示值。
-    @staticmethod
-    def get_current_value(obj: Position) -> str:
-        return trim_decimal_str(obj.cost_total or POSITION_ZERO)
-
-
-class InvestmentHistoryQuerySerializer(serializers.Serializer):
+class HistoryQuerySerializer(serializers.Serializer):
     account_id = serializers.IntegerField(required=False, min_value=1)
     instrument_id = serializers.IntegerField(required=False, min_value=1)
     side = serializers.ChoiceField(required=False, choices=InvestmentRecord.Side.choices)
@@ -123,8 +115,7 @@ class InvestmentHistoryItemSerializer(serializers.ModelSerializer):
     @staticmethod
     def get_cash_flow_amount(obj: InvestmentRecord) -> str:
         if obj.cash_transaction_id:
-            return trim_decimal_str(obj.cash_transaction.amount or Decimal("0"))
+            return format_decimal_str(obj.cash_transaction.amount or Decimal("0"))
         gross = quantize_decimal((obj.quantity or Decimal("0")) * (obj.price or Decimal("0")), Decimal("0.01"))
         amount = gross if obj.side == InvestmentRecord.Side.SELL else Decimal("0") - gross
-        return trim_decimal_str(amount)
-
+        return format_decimal_str(amount)

@@ -8,11 +8,10 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from accounts.models import Accounts, Transaction
 from accounts.services.transaction_service import create_transaction_for_locked_account
 from market.models import Instrument
-from market.services.snapshot.quote_store import ensure_instrument_quote
 from market.services.subscription.service import SOURCE_POSITION, set_user_instrument_source
-from common.constants.market import market_currency
 from common.exceptions import BusinessConflictError
-from common.utils.decimal_utils import quantize_decimal, trim_decimal, trim_decimal_str
+from common.utils import format_decimal_str, market_currency, normalize_decimal, quantize_decimal
+from market.services.data.quote_cache import ensure_instrument_quote
 
 from ..models import InvestmentRecord, Position
 from .account_service import sync_investment_account_for_user
@@ -44,7 +43,7 @@ def _expected_currency_for_instrument(instrument: Instrument) -> str:
 # 生成受长度限制的交易分类描述文本。
 def _safe_category_name(*, side: str, price: Decimal, quantity: Decimal) -> str:
     action = "买入" if side == InvestmentRecord.Side.BUY else "卖出"
-    raw = f"以 {trim_decimal_str(price)}价格{action}:{trim_decimal_str(quantity)}"
+    raw = f"以 {format_decimal_str(price)}价格{action}:{format_decimal_str(quantity)}"
     return raw[:24]
 
 
@@ -121,16 +120,16 @@ def _build_response(*, record: InvestmentRecord, position: Position, tx: Transac
         "investment_record_id": record.id,
         "position": {
             "instrument_id": position.instrument_id,
-            "quantity": trim_decimal_str(position.quantity),
-            "avg_cost": trim_decimal_str(position.avg_cost),
-            "cost_total": trim_decimal_str(position.cost_total),
-            "realized_pnl_total": trim_decimal_str(position.realized_pnl_total),
+            "quantity": format_decimal_str(position.quantity),
+            "avg_cost": format_decimal_str(position.avg_cost),
+            "cost_total": format_decimal_str(position.cost_total),
+            "realized_pnl_total": format_decimal_str(position.realized_pnl_total),
         },
         "transaction_id": tx.id,
-        "balance_after": trim_decimal_str(tx.balance_after),
+        "balance_after": format_decimal_str(tx.balance_after),
     }
     if realized_pnl is not None:
-        payload["realized_pnl"] = trim_decimal_str(realized_pnl)
+        payload["realized_pnl"] = format_decimal_str(realized_pnl)
     return payload
 
 
@@ -202,8 +201,8 @@ def execute_buy(*, user, instrument_id: int, quantity: Decimal, price: Decimal, 
             user=user,
             instrument=instrument,
             side=InvestmentRecord.Side.BUY,
-            quantity=trim_decimal(quantity),
-            price=trim_decimal(price),
+            quantity=normalize_decimal(quantity),
+            price=normalize_decimal(price),
             cash_account=account,
             cash_transaction=tx,
             trade_at=trade_at,
@@ -292,50 +291,19 @@ def execute_sell(*, user, instrument_id: int, quantity: Decimal, price: Decimal,
             user=user,
             instrument=instrument,
             side=InvestmentRecord.Side.SELL,
-            quantity=trim_decimal(quantity),
-            price=trim_decimal(price),
+            quantity=normalize_decimal(quantity),
+            price=normalize_decimal(price),
             cash_account=account,
             cash_transaction=tx,
             trade_at=trade_at,
-            realized_pnl=trim_decimal(realized_pnl),
+            realized_pnl=normalize_decimal(realized_pnl),
         )
 
     return _build_response(
         record=record,
         position=position_snapshot,
         tx=tx,
-        realized_pnl=trim_decimal(realized_pnl),
+        realized_pnl=normalize_decimal(realized_pnl),
     )
 
-
-# 删除数量已经清零的持仓记录，并同步订阅与投资账户。
-def delete_zero_position(*, user, instrument_id: int) -> dict:
-    with transaction.atomic():
-        position = (
-            Position.objects
-            .select_for_update()
-            .select_related("instrument")
-            .filter(user=user, instrument_id=instrument_id)
-            .first()
-        )
-        if position is None:
-            raise NotFound("持仓不存在")
-        if (position.quantity or POSITION_ZERO) != POSITION_ZERO:
-            raise ConflictError("仅允许删除数量为 0 的持仓")
-
-        instrument = position.instrument
-        position.delete()
-        set_user_instrument_source(
-            user=user,
-            instrument=instrument,
-            source=SOURCE_POSITION,
-            enabled=False,
-        )
-        _sync_investment_account_or_raise(user=user)
-
-    return {
-        "deleted": True,
-        "instrument_id": instrument_id,
-        "stock_code": instrument.symbol,
-    }
 

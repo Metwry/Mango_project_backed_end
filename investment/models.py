@@ -6,7 +6,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
-from common.db.constraints import check_constraint
+from common.utils import check_constraint
 
 
 class InvestmentRecord(models.Model):
@@ -89,12 +89,13 @@ class InvestmentRecord(models.Model):
     class Meta:
         # 数据库物理表名。
         db_table = "investment_record"
-        # 常用查询索引：按用户时间、用户+标的、资金账户、用户+方向检索。
+        # Django Admin 展示名称。
+        verbose_name = "投资记录"
+        verbose_name_plural = "投资记录"
+        # 常用查询索引：按用户时间、用户+标的检索。
         indexes = [
             models.Index(fields=["user", "trade_at"]),
-            models.Index(fields=["user", "instrument", "trade_at"]),
-            models.Index(fields=["cash_account", "trade_at"]),
-            models.Index(fields=["user", "side", "trade_at"]),
+            models.Index(fields=["user", "instrument"]),
         ]
         # 数据层约束：数量、价格大于 0，以及买卖方向与已实现盈亏字段保持一致。
         constraints = [
@@ -103,13 +104,11 @@ class InvestmentRecord(models.Model):
 
             # BUY: realized_pnl 必须为 NULL
             check_constraint(
-                expr=Q(side="BUY", realized_pnl__isnull=True) | Q(side="SELL"),
-                name="invrec_buy_realized_pnl_null",
-            ),
-            # SELL: realized_pnl 必须非 NULL
-            check_constraint(
-                expr=Q(side="SELL", realized_pnl__isnull=False) | Q(side="BUY"),
-                name="invrec_sell_realized_pnl_not_null",
+                expr=(
+                        Q(side="BUY", realized_pnl__isnull=True)
+                        | Q(side="SELL", realized_pnl__isnull=False)
+                ),
+                name="invrec_side_realized_pnl_consistent",
             ),
         ]
 
@@ -187,6 +186,9 @@ class Position(models.Model):
     class Meta:
         # 数据库物理表名。
         db_table = "investment_position"
+        # Django Admin 展示名称。
+        verbose_name = "持仓"
+        verbose_name_plural = "持仓"
         # 唯一约束与数值约束共同保证持仓状态自洽。
         constraints = [
             models.UniqueConstraint(fields=["user", "instrument"], name="uniq_user_instrument_position"),
@@ -201,8 +203,3 @@ class Position(models.Model):
                 name="pos_zero_qty_means_zero_cost",
             ),
         ]
-        # 优化按用户查看最近更新持仓的查询。
-        indexes = [
-            models.Index(fields=["user", "updated_at"]),
-        ]
-

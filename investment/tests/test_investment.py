@@ -13,7 +13,7 @@ from accounts.models import Accounts, Transaction
 from investment.models import InvestmentRecord, Position
 from investment.services.account_service import INVESTMENT_ACCOUNT_NAME
 from market.models import Instrument, UserInstrumentSubscription
-from market.services.snapshot.cache_keys import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.data.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
 
 
 def _seed_usd_rates():
@@ -316,6 +316,11 @@ class InvestmentBasicApiTests(APITestCase):
 
         delete_resp = self.client.delete(self.history_endpoint)
         self.assertEqual(delete_resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_delete_zero_position_endpoint_is_removed(self):
+        """验证删除零持仓接口已下线。"""
+        resp = self.client.delete(f"{self.positions_endpoint}{self.us_instrument.id}/")
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
 
 @override_settings(

@@ -4,10 +4,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from accounts.services.currency_service import load_cached_usd_rates
-from market.services.snapshot.quote_store import build_quote_index, get_snapshot_payload
-from common.constants.market import market_currency
-from common.utils.code_utils import normalize_code, strip_market_suffix
-from common.utils.decimal_utils import quantize_decimal, to_decimal
+from common.utils import market_currency, normalize_code, quantize_decimal, strip_market_suffix, to_decimal
+from market.services.data.quote_cache import build_quote_index, get_market_data_payload
 
 from ..models import Position
 
@@ -105,7 +103,7 @@ class InvestmentAccountValuation:
 def calculate_investment_account_valuation(*, positions: list[Position], target_currency: str) -> InvestmentAccountValuation:
     account_currency = normalize_code(target_currency) or "USD"
     usd_rates = load_cached_usd_rates()
-    quote_index = build_quote_index(get_snapshot_payload())
+    quote_index = build_quote_index(get_market_data_payload())
 
     total_usd = ZERO
     quoted_count = 0

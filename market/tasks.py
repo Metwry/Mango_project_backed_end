@@ -1,8 +1,8 @@
 from celery import shared_task
 
-from market.services.snapshot.sync import sync_watchlist_snapshot
+from market.services.data.sync import pull_data
 
 
-@shared_task
-def task_pull_watchlist_quotes():
-    return sync_watchlist_snapshot()
+@shared_task(name="market.tasks.task_pull_data")
+def task_pull_data():
+    return pull_data()

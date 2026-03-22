@@ -94,7 +94,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     "rest_framework_simplejwt.token_blacklist",
-
+    "drf_spectacular",
     'login',
     'accounts',
     'market',
@@ -105,6 +105,7 @@ INSTALLED_APPS = [
 
 # Django DRF配置
 REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': "drf_spectacular.openapi.AutoSchema",
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
@@ -113,6 +114,15 @@ REST_FRAMEWORK = {
     ),
     "EXCEPTION_HANDLER": "common.exception_handler.custom_exception_handler",
 }
+
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Mango Finance API",
+    "DESCRIPTION": "API 文档",
+    "VERSION": "1.0.0",
+}
+
+
 # JWT过期时间 配置
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=300),
@@ -166,13 +176,9 @@ LOGO_DEV_PUBLISHABLE_KEY = os.getenv(
     os.getenv("LOGO_DEV_API_KEY", ""),
 ).strip()
 LOGO_DOWNLOAD_DIR = os.getenv("LOGO_DOWNLOAD_DIR", str((RESOURCE_DIR / "logo_downloads").resolve())).strip()
-MARKET_CALENDAR_DIR = os.getenv("MARKET_CALENDAR_DIR", str((RESOURCE_DIR / "data" / "market_calendars").resolve())).strip()
-MARKET_CALENDAR_REQUIRED = os.getenv("MARKET_CALENDAR_REQUIRED", "true").strip().lower() in {"1", "true", "yes"}
-MARKET_PULL_FALLBACK_ON_MISSING_CALENDAR = (
-    os.getenv("MARKET_PULL_FALLBACK_ON_MISSING_CALENDAR", "false").strip().lower() in {"1", "true", "yes"}
-)
 MARKET_PULL_TASK_INTERVAL_MINUTES = int(os.getenv("MARKET_PULL_TASK_INTERVAL_MINUTES", "5"))
-MARKET_FX_PULL_INTERVAL_MINUTES = int(os.getenv("MARKET_FX_PULL_INTERVAL_MINUTES", "30"))
+MARKET_PULL_INTERVAL_MINUTES = int(os.getenv("MARKET_PULL_INTERVAL_MINUTES", "10"))
+MARKET_FX_PULL_INTERVAL_MINUTES = int(os.getenv("MARKET_FX_PULL_INTERVAL_MINUTES", "240"))
 MARKET_CRYPTO_PULL_INTERVAL_MINUTES = int(os.getenv("MARKET_CRYPTO_PULL_INTERVAL_MINUTES", "10"))
 MARKET_QUOTE_PROVIDER = os.getenv("MARKET_QUOTE_PROVIDER", "real").strip().lower()
 MARKET_INDEX_PROVIDER = os.getenv("MARKET_INDEX_PROVIDER", "yfinance").strip().lower()
@@ -180,11 +186,14 @@ MARKET_INDEX_PROVIDER = os.getenv("MARKET_INDEX_PROVIDER", "yfinance").strip().l
 SNAPSHOT_AGG_H4_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_H4_CRON_MINUTE", "0"))
 SNAPSHOT_AGG_D1_CRON_HOUR = int(os.getenv("SNAPSHOT_AGG_D1_CRON_HOUR", "0"))
 SNAPSHOT_AGG_D1_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_D1_CRON_MINUTE", "0"))
+
 SNAPSHOT_AGG_MON1_CRON_DAY = int(os.getenv("SNAPSHOT_AGG_MON1_CRON_DAY", "1"))
 SNAPSHOT_AGG_MON1_CRON_HOUR = int(os.getenv("SNAPSHOT_AGG_MON1_CRON_HOUR", "0"))
 SNAPSHOT_AGG_MON1_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_MON1_CRON_MINUTE", "0"))
+
 SNAPSHOT_CLEANUP_CRON_HOUR = int(os.getenv("SNAPSHOT_CLEANUP_CRON_HOUR", "1"))
 SNAPSHOT_CLEANUP_CRON_MINUTE = int(os.getenv("SNAPSHOT_CLEANUP_CRON_MINUTE", "45"))
+
 CELERY_BEAT_MAX_LOOP_INTERVAL = int(os.getenv("CELERY_BEAT_MAX_LOOP_INTERVAL", "5"))
 
 
@@ -197,24 +206,20 @@ CELERY_ENABLE_UTC = True
 
 CELERY_BEAT_SCHEDULE = {
     "pull-watchlist-quotes-every-5-minutes": {
-        "task": "market.tasks.task_pull_watchlist_quotes",
+        "task": "market.tasks.task_pull_data",
         "schedule": crontab(minute="*/5"),
-        "options": {"queue": "market_sync"},
     },
     "capture-snapshot-m15": {
         "task": "snapshot.tasks.task_capture_m15_snapshots",
         "schedule": crontab(minute="*/15"),
-        "options": {"queue": "snapshot_capture"},
     },
     "aggregate-snapshot-h4": {
         "task": "snapshot.tasks.task_aggregate_h4_snapshots",
         "schedule": crontab(minute=SNAPSHOT_AGG_H4_CRON_MINUTE, hour="*/4"),
-        "options": {"queue": "snapshot_aggregate"},
     },
     "aggregate-snapshot-d1": {
         "task": "snapshot.tasks.task_aggregate_d1_snapshots",
         "schedule": crontab(minute=SNAPSHOT_AGG_D1_CRON_MINUTE, hour=SNAPSHOT_AGG_D1_CRON_HOUR),
-        "options": {"queue": "snapshot_aggregate"},
     },
     "aggregate-snapshot-mon1": {
         "task": "snapshot.tasks.task_aggregate_mon1_snapshots",
@@ -223,17 +228,15 @@ CELERY_BEAT_SCHEDULE = {
             hour=SNAPSHOT_AGG_MON1_CRON_HOUR,
             day_of_month=SNAPSHOT_AGG_MON1_CRON_DAY,
         ),
-        "options": {"queue": "snapshot_aggregate"},
     },
     "cleanup-snapshot-history-daily": {
         "task": "snapshot.tasks.task_cleanup_snapshot_history",
         "schedule": crontab(hour=SNAPSHOT_CLEANUP_CRON_HOUR, minute=SNAPSHOT_CLEANUP_CRON_MINUTE),
-        "options": {"queue": "snapshot_cleanup"},
     },
 }
 
 CELERY_TASK_ROUTES = {
-    "market.tasks.task_pull_watchlist_quotes": {"queue": "market_sync"},
+    "market.tasks.task_pull_data": {"queue": "market_sync"},
     "snapshot.tasks.task_capture_m15_snapshots": {"queue": "snapshot_capture"},
     "snapshot.tasks.task_aggregate_h4_snapshots": {"queue": "snapshot_aggregate"},
     "snapshot.tasks.task_aggregate_d1_snapshots": {"queue": "snapshot_aggregate"},

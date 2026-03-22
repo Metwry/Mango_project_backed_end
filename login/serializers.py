@@ -12,19 +12,18 @@ from .services.email_code_service import (
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(required=False, allow_blank=True)
-    email = serializers.CharField(required=False, allow_blank=True)
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     # 校验登录标识与密码，并解析出对应用户对象。
     def validate(self, attrs):
-        identifier = (attrs.get("username") or attrs.get("email") or "").strip()
-        password = attrs.get("password") or ""
-        if not identifier or not password:
-            raise serializers.ValidationError({"message": "用户名/邮箱和密码必填"})
+        username = attrs.get("username")
+        password = attrs.get("password")
+        if not username or not password:
+            raise serializers.ValidationError({"message": "用户名和密码必填"})
 
         user = authenticate_email_password(
             self.context.get("request"),
-            identifier=identifier,
+            username=username,
             password=password,
         )
         if not user:
@@ -37,7 +36,7 @@ class LoginSerializer(serializers.Serializer):
 class SendRegisterEmailCodeSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
-    # 校验注册邮箱格式并确认该邮箱尚未注册。
+    # ed 校验注册邮箱格式并确认该邮箱尚未注册。
     def validate_email(self, value: str) -> str:
         email = value.strip().lower()
         try:
@@ -77,7 +76,7 @@ class EmailRegisterSerializer(serializers.Serializer):
 class SendPasswordResetEmailCodeSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
-    # 校验找回密码邮箱必须已注册。
+    # ed校验找回密码邮箱必须已注册。
     def validate_email(self, value: str) -> str:
         email = value.strip().lower()
         try:
@@ -119,4 +118,3 @@ class UpdateUsernameSerializer(serializers.Serializer):
         if not username:
             raise serializers.ValidationError("用户名不能为空")
         return username
-

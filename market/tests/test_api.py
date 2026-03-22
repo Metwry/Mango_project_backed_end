@@ -10,9 +10,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from market.models import Instrument, UserInstrumentSubscription
-from market.services.snapshot.cache_keys import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
-from market.services.index.quote import build_market_indices_snapshot
-from market.services.snapshot.quote_store import orphan_quote_cache_key
+from market.services.data.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.data.indices import pull_indices
+from market.services.data.quote_cache import orphan_quote_cache_key
 
 
 @override_settings(
@@ -40,7 +40,7 @@ class MarketBasicApiTests(APITestCase):
             is_active=True,
         )
 
-    @patch("market.services.snapshot.quote_store.pull_single_instrument_quote")
+    @patch("market.services.data.quote_cache.pull_single_instrument_quote")
     def test_watchlist_add_and_snapshot_query(self, mock_pull):
         """验证自选 验证添加后可查询快照。"""
         mock_pull.return_value = {
@@ -87,7 +87,7 @@ class MarketBasicApiTests(APITestCase):
         self.assertIn("指数暂不支持加入自选", resp.data["message"])
 
     @patch(
-        "market.views.build_market_indices_snapshot",
+        "market.views.pull_indices",
         return_value={
             "updated_at": "2026-03-07T09:30:00+08:00",
             "items": [
@@ -131,7 +131,7 @@ class MarketBasicApiTests(APITestCase):
             is_active=True,
         )
 
-        payload = build_market_indices_snapshot()
+        payload = pull_indices()
 
         self.assertIn("updated_at", payload)
         self.assertEqual(len(payload["items"]), 2)
@@ -238,7 +238,7 @@ class MarketComplexApiTests(APITestCase):
         self.assertTrue(sub.from_position)
         self.assertFalse(sub.from_watchlist)
 
-    @patch("market.services.snapshot.quote_store.pull_single_instrument_quote")
+    @patch("market.services.data.quote_cache.pull_single_instrument_quote")
     def test_watchlist_delete_accepts_market_and_short_code(self, mock_pull):
         """验证自选 删除 支持 市场 和 short code 删除。"""
         mock_pull.return_value = {
@@ -258,7 +258,7 @@ class MarketComplexApiTests(APITestCase):
         self.assertEqual(del_resp.data["deleted"], 1)
         self.assertFalse(UserInstrumentSubscription.objects.filter(user=self.user, instrument=self.instrument).exists())
 
-    @patch("market.services.snapshot.quote_store.pull_single_instrument_quote")
+    @patch("market.services.data.quote_cache.pull_single_instrument_quote")
     def test_delete_to_orphan_then_add_uses_orphan_quote(self, mock_pull):
         """验证删除 to orphan then 会复用孤儿行情。"""
         mock_pull.return_value = {
