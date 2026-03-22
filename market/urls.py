@@ -5,15 +5,15 @@ from .views import (
     MarketIndexSnapshotView,
     MarketInstrumentSearchView,
     MarketLatestQuoteBatchView,
-    MarketsView,
-    MarketWatchlistAddView,
+    MarketWatchlistSnapshotView,
+    MarketWatchlistView,
 )
 
 urlpatterns = [
-    path("", MarketsView.as_view(), name="user-markets"),
+    path("", MarketWatchlistSnapshotView.as_view(), name="user-markets"),
     path("indices/", MarketIndexSnapshotView.as_view(), name="user-market-indices"),
     path("fx-rates/", MarketFxRatesView.as_view(), name="user-market-fx-rates"),
     path("search/", MarketInstrumentSearchView.as_view(), name="user-market-search"),
     path("quotes/latest/", MarketLatestQuoteBatchView.as_view(), name="user-market-latest-quotes"),
-    path("watchlist/", MarketWatchlistAddView.as_view(), name="user-market-watchlist-add"),
+    path("watchlist/", MarketWatchlistView.as_view(), name="user-market-watchlist-add"),
 ]

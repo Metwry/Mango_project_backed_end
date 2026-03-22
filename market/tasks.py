@@ -1,6 +1,6 @@
 from celery import shared_task
 
-from market.services.data.sync import pull_data
+from market.services.data.market_refresh import pull_data
 
 
 @shared_task(name="market.tasks.task_pull_data")

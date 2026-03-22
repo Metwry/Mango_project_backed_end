@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from django.test import SimpleTestCase, override_settings
 
-from market.services.data.utils import (
+from market.services.market_utils import (
     filter_snapshot_quotes,
     format_latest_quote_item,
     should_pull_market_tick,

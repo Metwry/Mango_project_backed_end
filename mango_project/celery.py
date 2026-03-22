@@ -4,7 +4,7 @@ import logging
 from celery import Celery
 from celery.signals import worker_ready
 
-from common.logging_utils import log_info
+from common.utils import log_info
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mango_project.settings")

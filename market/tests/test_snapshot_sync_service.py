@@ -4,9 +4,9 @@ from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
 from unittest.mock import patch
 
-from market.services.data.cache import WATCHLIST_QUOTES_KEY, WATCHLIST_QUOTES_MARKET_KEY_PREFIX
-from market.services.data.market import pull_market
-from market.services.data.pull_guard import GuardDecision
+from market.services.quote_cache import WATCHLIST_QUOTES_KEY, WATCHLIST_QUOTES_MARKET_KEY_PREFIX
+from market.services.data.watchlist_snapshot import pull_market
+from market.services.market_schedule import GuardDecision
 
 
 @override_settings(
@@ -21,16 +21,14 @@ class SnapshotSyncServiceTests(SimpleTestCase):
     def setUp(self):
         cache.clear()
 
-    @patch("market.services.data.market._sync_investment_account_balances")
-    @patch("market.services.data.market.pull_watchlist_quotes")
-    @patch("market.services.data.market.resolve_due_markets")
-    @patch("market.services.data.market.global_subscription_meta_by_market")
+    @patch("market.services.data.watchlist_snapshot.pull_watchlist_quotes")
+    @patch("market.services.data.watchlist_snapshot.resolve_due_markets")
+    @patch("market.services.data.watchlist_snapshot.global_subscription_meta_by_market")
     def test_due_market_pulls_quotes(
         self,
         mock_sub_meta,
         mock_resolve_due,
         mock_pull_quotes,
-        _mock_sync_accounts,
     ):
         """验证到期市场会拉取行情。"""
         mock_sub_meta.return_value = {
@@ -60,21 +58,19 @@ class SnapshotSyncServiceTests(SimpleTestCase):
 
         payload = pull_market()
 
-        mock_pull_quotes.assert_called_once_with(force_fetch_all_markets=False, allowed_markets={"US"})
+        mock_pull_quotes.assert_called_once_with(allowed_markets={"US"})
         self.assertEqual(payload["updated_markets"], ["US"])
         market_payload = cache.get(f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}US")
         self.assertEqual(market_payload["pulled_at"], payload["updated_at"])
 
-    @patch("market.services.data.market._sync_investment_account_balances")
-    @patch("market.services.data.market.pull_watchlist_quotes")
-    @patch("market.services.data.market.resolve_due_markets")
-    @patch("market.services.data.market.global_subscription_meta_by_market")
+    @patch("market.services.data.watchlist_snapshot.pull_watchlist_quotes")
+    @patch("market.services.data.watchlist_snapshot.resolve_due_markets")
+    @patch("market.services.data.watchlist_snapshot.global_subscription_meta_by_market")
     def test_no_due_and_no_bootstrap_keeps_previous_pulled_at(
         self,
         mock_sub_meta,
         mock_resolve_due,
         mock_pull_quotes,
-        _mock_sync_accounts,
     ):
         """验证no due and no bootstrap 在未到期且未 bootstrap 时保留上次 pulled at。"""
         old_pulled_at = "2026-03-04T12:00:00+08:00"

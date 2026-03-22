@@ -6,9 +6,8 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from django.conf import settings
 
-from common.utils import format_decimal_str, normalize_code, to_decimal
-
-from .quote_rows import quote_code
+from common.normalize import normalize_code, resolve_short_code
+from common.utils import format_decimal_str, to_decimal
 
 MARKET_CRYPTO = "CRYPTO"
 MARKET_CN = "CN"
@@ -30,10 +29,12 @@ except Exception:  # pragma: no cover - runtime dependency
 _EXCHANGE_CALENDAR_CACHE: dict[str, object] = {}
 
 
+# 标准化市场代码。
 def normalize_market_code(market: object) -> str:
     return normalize_code(market)
 
 
+# 返回指定市场对应的时区名称。
 def market_timezone_name(market: object) -> str:
     market_code = normalize_market_code(market)
     if market_code == MARKET_US:
@@ -45,18 +46,22 @@ def market_timezone_name(market: object) -> str:
     return "UTC"
 
 
+# 返回指定市场对应的时区对象。
 def market_timezone(market: object) -> ZoneInfo:
     return ZoneInfo(market_timezone_name(market))
 
 
+# 判断本地时间是否为工作日。
 def is_weekday(dt_local: datetime) -> bool:
     return dt_local.weekday() < 5
 
 
+# 返回市场对应的交易所日历名称。
 def exchange_calendar_name(market: object) -> str | None:
     return CALENDAR_NAME_BY_MARKET.get(normalize_market_code(market))
 
 
+# 读取并缓存指定市场的交易所日历对象。
 def get_exchange_calendar(market: object):
     market_code = normalize_market_code(market)
     cached = _EXCHANGE_CALENDAR_CACHE.get(market_code)
@@ -72,6 +77,7 @@ def get_exchange_calendar(market: object):
     return calendar
 
 
+# 将时间统一转换为交易所分钟粒度时间戳。
 def _to_exchange_minute(now_utc: datetime) -> pd.Timestamp:
     ts = pd.Timestamp(now_utc)
     if ts.tzinfo is None:
@@ -81,6 +87,7 @@ def _to_exchange_minute(now_utc: datetime) -> pd.Timestamp:
     return ts.floor("min")
 
 
+# 在无交易所日历时使用兜底交易时段判断是否开市。
 def _fallback_open_hours_market(market: str, now_utc: datetime) -> bool:
     market_code = normalize_market_code(market)
     if market_code == MARKET_US:
@@ -97,6 +104,7 @@ def _fallback_open_hours_market(market: str, now_utc: datetime) -> bool:
     return False
 
 
+# 判断当前时间市场是否处于可拉取行情的交易时段。
 def should_fetch_market(market: str, now_utc: datetime | None = None) -> bool:
     now_utc = now_utc or datetime.now(timezone.utc)
     market_code = normalize_market_code(market)
@@ -112,6 +120,7 @@ def should_fetch_market(market: str, now_utc: datetime | None = None) -> bool:
     return False
 
 
+# 读取指定市场的行情拉取间隔分钟数。
 def market_pull_interval_minutes(market: object) -> int:
     market_code = normalize_market_code(market)
     if market_code == MARKET_FX:
@@ -128,6 +137,7 @@ def market_pull_interval_minutes(market: object) -> int:
     return max(1, min(value, 240))
 
 
+# 判断当前分钟是否命中该市场的拉取节奏。
 def should_pull_market_tick(market: str, now_utc: datetime | None = None) -> bool:
     now_utc = now_utc or datetime.now(timezone.utc)
     market_code = normalize_market_code(market)
@@ -140,11 +150,13 @@ def should_pull_market_tick(market: str, now_utc: datetime | None = None) -> boo
     return (minutes_since_day_start % interval_minutes) == 0
 
 
+# 安全地将价格值格式化为字符串。
 def safe_price_str(raw: object) -> str | None:
     value = to_decimal(raw)
     return format_decimal_str(value) if value is not None else None
 
 
+# 规范化单条行情中的可选展示字段。
 def normalize_quote_row(row: dict) -> dict:
     normalized_row = dict(row)
     normalized_row["logo_url"] = normalized_row.get("logo_url") or None
@@ -152,6 +164,12 @@ def normalize_quote_row(row: dict) -> dict:
     return normalized_row
 
 
+# 从行情行中解析统一代码。
+def _quote_code(row: dict) -> str:
+    return resolve_short_code(row.get("short_code"), row.get("symbol"))
+
+
+# 将缓存行情格式化为最新价接口返回项。
 def format_latest_quote_item(*, market: str, short_code: str, row: dict | None) -> dict:
     latest_price = safe_price_str(row.get("price")) if isinstance(row, dict) else None
     return {
@@ -163,6 +181,7 @@ def format_latest_quote_item(*, market: str, short_code: str, row: dict | None) 
     }
 
 
+# 将标的对象格式化为自选接口使用的结构。
 def format_watchlist_instrument(instrument) -> dict:
     return {
         "symbol": instrument.symbol,
@@ -174,6 +193,7 @@ def format_watchlist_instrument(instrument) -> dict:
     }
 
 
+# 按允许代码集合过滤行情快照列表。
 def filter_snapshot_quotes(rows: object, allow_codes: set[str]) -> list[dict]:
     if not isinstance(rows, list):
         return []
@@ -182,6 +202,6 @@ def filter_snapshot_quotes(rows: object, allow_codes: set[str]) -> list[dict]:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        if quote_code(row) in allow_codes:
+        if _quote_code(row) in allow_codes:
             filtered.append(normalize_quote_row(row))
     return filtered

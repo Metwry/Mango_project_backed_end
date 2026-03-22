@@ -10,9 +10,10 @@ from django.test import TestCase, override_settings
 from accounts.models import Accounts, Currency
 from investment.models import Position
 from market.models import Instrument, UserInstrumentSubscription
-from market.services.data.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
-from market.services.data.market import pull_market
-from market.services.data.pull_guard import GuardDecision
+from market.services.data.market_refresh import pull_data
+from market.services.quote_cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.data.watchlist_snapshot import pull_market
+from market.services.market_schedule import GuardDecision
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
 from snapshot.services.snapshot_service import capture_snapshots
 
@@ -40,8 +41,8 @@ class MarketSnapshotIntegrationTests(TestCase):
             is_active=True,
         )
 
-    @patch("market.services.data.market.pull_watchlist_quotes")
-    @patch("market.services.data.market.resolve_due_markets")
+    @patch("market.services.data.watchlist_snapshot.pull_watchlist_quotes")
+    @patch("market.services.data.watchlist_snapshot.resolve_due_markets")
     def test_sync_watchlist_snapshot_revalues_investment_account_balance(
         self,
         mock_resolve_due,
@@ -99,13 +100,13 @@ class MarketSnapshotIntegrationTests(TestCase):
             ]
         }
 
-        pull_market()
+        pull_data()
 
         investment_account.refresh_from_db()
         self.assertEqual(investment_account.balance, Decimal("200.00"))
 
-    @patch("market.services.data.market.pull_watchlist_quotes")
-    @patch("market.services.data.market.resolve_due_markets")
+    @patch("market.services.data.watchlist_snapshot.pull_watchlist_quotes")
+    @patch("market.services.data.watchlist_snapshot.resolve_due_markets")
     def test_sync_then_capture_m15_writes_position_and_account_snapshots(
         self,
         mock_resolve_due,

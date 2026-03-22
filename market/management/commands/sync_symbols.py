@@ -16,9 +16,10 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
+from common.normalize import normalize_cn_code, normalize_us_code
 from market.models import Instrument
-from market.services.logo_service import build_logo_metadata
-from market.services.data.core_indices import index_definitions_for_markets
+from market.services.instrument_logo import build_logo_metadata
+from market.services.data.core_index_definitions import index_definitions_for_markets
 
 
 DEFAULT_HEADERS = {
@@ -32,7 +33,6 @@ DEFAULT_HEADERS = {
 COINGECKO_MARKETS_URL = "https://api.coingecko.com/api/v3/coins/markets"
 STOOQ_QUOTE_URL = "https://stooq.com/q/l/"
 DEFAULT_CRYPTO_PROXY = os.getenv("SYNC_SYMBOLS_PROXY", "").strip()
-US_EXCHANGE_SUFFIXES = {"US", "N", "A", "P", "Q", "O", "OQ", "OB", "PK", "TO"}
 
 
 @dataclass(frozen=True)
@@ -363,7 +363,7 @@ class Command(BaseCommand):
         rows = df.dropna(subset=["code", "name"])
         records: list[InstrumentPayload] = []
         for _, row in rows.iterrows():
-            code = self.normalize_cn_code(row["code"])
+            code = normalize_cn_code(row["code"])
             name = str(row["name"]).strip()
             if not code or not name:
                 continue
@@ -448,7 +448,7 @@ class Command(BaseCommand):
         rows = df.dropna(subset=["symbol"])
         records: list[InstrumentPayload] = []
         for _, row in rows.iterrows():
-            short_code = self.normalize_us_code(row["symbol"])
+            short_code = normalize_us_code(row["symbol"])
             cname = str(row.get("cname", "")).strip()
             ename = str(row.get("name", "")).strip()
             name = cname or ename
@@ -742,14 +742,6 @@ class Command(BaseCommand):
         return None
 
     @staticmethod
-    def normalize_cn_code(raw_code: object) -> str:
-        code = str(raw_code).strip()
-        digits = re.sub(r"\D", "", code)
-        if digits:
-            return digits.zfill(6) if len(digits) <= 6 else digits
-        return re.sub(r"[^A-Za-z0-9]", "", code).upper()
-
-    @staticmethod
     def guess_cn_exchange(code: str) -> str:
         if code.startswith(("6", "9")):
             return "SH"
@@ -758,21 +750,3 @@ class Command(BaseCommand):
         if code.startswith(("4", "8")):
             return "BJ"
         return "CN"
-
-    @staticmethod
-    def normalize_us_code(raw_code: object) -> str:
-        code = str(raw_code).strip().upper()
-        if not code:
-            return ""
-
-        parts = code.split(".")
-        if len(parts) > 1 and parts[0].isdigit():
-            code = ".".join(parts[1:])
-
-        parts = code.split(".")
-        if len(parts) > 1 and parts[-1] in US_EXCHANGE_SUFFIXES:
-            code = ".".join(parts[:-1])
-
-        code = code.replace(".", "-").replace("/", "-")
-        code = re.sub(r"[^A-Z0-9\-]", "", code)
-        return code

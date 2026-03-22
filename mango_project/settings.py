@@ -112,7 +112,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
-    "EXCEPTION_HANDLER": "common.exception_handler.custom_exception_handler",
+    "EXCEPTION_HANDLER": "common.exception.custom_exception_handler",
 }
 
 
@@ -180,8 +180,6 @@ MARKET_PULL_TASK_INTERVAL_MINUTES = int(os.getenv("MARKET_PULL_TASK_INTERVAL_MIN
 MARKET_PULL_INTERVAL_MINUTES = int(os.getenv("MARKET_PULL_INTERVAL_MINUTES", "10"))
 MARKET_FX_PULL_INTERVAL_MINUTES = int(os.getenv("MARKET_FX_PULL_INTERVAL_MINUTES", "240"))
 MARKET_CRYPTO_PULL_INTERVAL_MINUTES = int(os.getenv("MARKET_CRYPTO_PULL_INTERVAL_MINUTES", "10"))
-MARKET_QUOTE_PROVIDER = os.getenv("MARKET_QUOTE_PROVIDER", "real").strip().lower()
-MARKET_INDEX_PROVIDER = os.getenv("MARKET_INDEX_PROVIDER", "yfinance").strip().lower()
 
 SNAPSHOT_AGG_H4_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_H4_CRON_MINUTE", "0"))
 SNAPSHOT_AGG_D1_CRON_HOUR = int(os.getenv("SNAPSHOT_AGG_D1_CRON_HOUR", "0"))

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from common.exceptions import LoginFailedError
+from common.exception import LoginFailedError
 
 from .services.auth_service import authenticate_email_password
 from .services.email_code_service import (

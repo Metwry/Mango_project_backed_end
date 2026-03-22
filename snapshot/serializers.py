@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from rest_framework import serializers
 
-from common.utils import normalize_datetime_to_utc
+from common.normalize import normalize_datetime_to_utc
 from snapshot.models import SnapshotLevel
 
 

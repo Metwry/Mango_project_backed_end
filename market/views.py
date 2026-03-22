@@ -1,103 +1,111 @@
 from rest_framework import status
-from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from common.utils import normalize_code
 
 from .serializers import (
-    InstrumentSearchQuerySerializer,
-    InstrumentSearchItemSerializer,
-    LatestQuoteBatchSerializer,
+    FxRatesQueryRequestSerializer,
+    FxRatesResponseSerializer,
+    IndexSnapshotResponseSerializer,
+    InstrumentSearchQueryRequestSerializer,
+    InstrumentSearchResponseSerializer,
+    LatestQuoteBatchRequestSerializer,
+    LatestQuoteBatchResponseSerializer,
+    MarketSnapshotResponseSerializer,
+    WatchlistAddRequestSerializer,
+    WatchlistAddResponseSerializer,
+    WatchlistDeleteRequestSerializer,
+    WatchlistDeleteResponseSerializer,
 )
-from .services.api.service import (
-    add_watchlist_symbol,
-    build_latest_quotes,
-    build_user_markets_snapshot,
-    delete_watchlist_symbol,
-    search_instruments,
-)
-from .services.data.indices import pull_indices
-from .services.data.rates import get_fx_rates
+from .services.data.index_snapshot import pull_indices
+from .services.fx_rates import get_fx_rates
+from .services.instrument_queries import build_latest_quotes, build_user_markets_snapshot, search_instruments
+from .services.instrument_subscriptions import add_watchlist_symbol, delete_watchlist_symbol
 
-class MarketsView(APIView):
+
+class MarketWatchlistSnapshotView(APIView):
     # ed 返回当前用户自选市场的最新行情数据。
     def get(self, request, *args, **kwargs):
-        return Response(build_user_markets_snapshot(request.user), status=status.HTTP_200_OK)
+        payload = build_user_markets_snapshot(request.user)
+        serializer = MarketSnapshotResponseSerializer(instance=payload)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class MarketFxRatesView(APIView):
     # ed 返回指定基准货币对应的汇率行情数据。
     def get(self, request, *args, **kwargs):
+        request_serializer = FxRatesQueryRequestSerializer(data=request.query_params)
+        request_serializer.is_valid(raise_exception=True)
         try:
-            payload = get_fx_rates(request.query_params.get("base"))
+            payload = get_fx_rates(request_serializer.validated_data["base"])
         except ValueError as exc:
             return Response(
                 {"message": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return Response(payload, status=status.HTTP_200_OK)
+        response_serializer = FxRatesResponseSerializer(instance=payload)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 
 class MarketInstrumentSearchView(APIView):
     # ed 根据关键词搜索可交易标的。
     def get(self, request, *args, **kwargs):
-        params = InstrumentSearchQuerySerializer(data=request.query_params)
-        params.is_valid(raise_exception=True)
-
-        if not params.validated_data["query"]:
-            return Response({"results": []}, status=status.HTTP_200_OK)
-
-        qs = search_instruments(
-            query=params.validated_data["query"],
-            limit=params.validated_data["limit"],
-        )
-        serializer = InstrumentSearchItemSerializer(qs, many=True)
-        return Response({"results": serializer.data}, status=status.HTTP_200_OK)
+        request_serializer = InstrumentSearchQueryRequestSerializer(data=request.query_params)
+        request_serializer.is_valid(raise_exception=True)
+        query = request_serializer.validated_data["query"]
+        if not query:
+            payload = {"results": []}
+        else:
+            payload = {
+                "results": list(
+                    search_instruments(
+                        query=query,
+                        limit=request_serializer.validated_data["limit"],
+                    )
+                )
+            }
+        response_serializer = InstrumentSearchResponseSerializer(instance=payload)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 
 class MarketLatestQuoteBatchView(APIView):
     # ed 批量返回持仓标的的最新价格数据。
     def post(self, request, *args, **kwargs):
-        serializer = LatestQuoteBatchSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        quotes = build_latest_quotes(serializer.validated_data["items"])
-        return Response({"quotes": quotes}, status=status.HTTP_200_OK)
+        request_serializer = LatestQuoteBatchRequestSerializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
+        payload = {"quotes": build_latest_quotes(request_serializer.validated_data["items"])}
+        response_serializer = LatestQuoteBatchResponseSerializer(instance=payload)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 
 class MarketIndexSnapshotView(APIView):
     # ed 返回核心指数行情快照。
     def get(self, request, *args, **kwargs):
-        return Response(pull_indices(), status=status.HTTP_200_OK)
+        payload = pull_indices()
+        serializer = IndexSnapshotResponseSerializer(instance=payload)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class MarketWatchlistAddView(APIView):
+class MarketWatchlistView(APIView):
     # ed 将指定标的加入当前用户自选。
     def post(self, request, *args, **kwargs):
-        symbol = str(request.data.get("symbol") or "").strip()
-        if not symbol:
-            raise ValidationError({"symbol": "symbol 不能为空"})
-        result = add_watchlist_symbol(
+        request_serializer = WatchlistAddRequestSerializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
+        payload = add_watchlist_symbol(
             user=request.user,
-            symbol=symbol,
+            symbol=request_serializer.validated_data["symbol"],
         )
-
-        status_code = status.HTTP_201_CREATED if result.get("created") else status.HTTP_200_OK
-        return Response(result, status=status_code)
+        response_serializer = WatchlistAddResponseSerializer(instance=payload)
+        status_code = status.HTTP_201_CREATED if payload.get("created") else status.HTTP_200_OK
+        return Response(response_serializer.data, status=status_code)
 
     # ed 将指定标的从当前用户自选移除，并同步更新缓存行情。
     def delete(self, request, *args, **kwargs):
-        market = normalize_code(request.data.get("market"))
-        short_code = normalize_code(request.data.get("short_code"))
-        errors = {}
-        if not market:
-            errors["market"] = "market 不能为空"
-        if not short_code:
-            errors["short_code"] = "short_code 不能为空"
-        if errors:
-            raise ValidationError(errors)
-        result = delete_watchlist_symbol(
+        request_serializer = WatchlistDeleteRequestSerializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
+        payload = delete_watchlist_symbol(
             user=request.user,
-            market=market,
-            short_code=short_code,
+            market=request_serializer.validated_data["market"],
+            short_code=request_serializer.validated_data["short_code"],
         )
-        return Response(result, status=status.HTTP_200_OK)
+        response_serializer = WatchlistDeleteResponseSerializer(instance=payload)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
