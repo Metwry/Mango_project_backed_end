@@ -1,11 +1,13 @@
 from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal, ROUND_HALF_UP
 from types import MappingProxyType
+from typing import Any
 
 from django import VERSION as DJANGO_VERSION
 from django.db import models
 from django.db.models import Q
-from django.utils import timezone
+
+from .normalize import normalize_decimal
 
 
 def safe_payload_data(payload: object) -> dict:
@@ -14,29 +16,6 @@ def safe_payload_data(payload: object) -> dict:
     data = payload.get("data")
     return data if isinstance(data, dict) else {}
 
-
-def normalize_code(value: object) -> str:
-    return str(value or "").strip().upper()
-
-
-def strip_market_suffix(symbol: object) -> str:
-    value = normalize_code(symbol)
-    if "." not in value:
-        return value
-    return value.rsplit(".", 1)[0]
-
-
-def resolve_short_code(short_code: object, symbol: object) -> str:
-    return normalize_code(short_code) or strip_market_suffix(symbol)
-
-
-def normalize_datetime_to_utc(value):
-    dt = value
-    if timezone.is_naive(dt):
-        dt = timezone.make_aware(dt, timezone.get_current_timezone())
-    return dt.astimezone(dt_timezone.utc)
-
-
 def to_decimal(value: object) -> Decimal | None:
     if value in (None, ""):
         return None
@@ -44,10 +23,6 @@ def to_decimal(value: object) -> Decimal | None:
         return Decimal(str(value))
     except Exception:
         return None
-
-
-def normalize_decimal(value: Decimal) -> Decimal:
-    return Decimal("0") if value.is_zero() else value
 
 
 def format_decimal_str(value: Decimal) -> str:
@@ -81,23 +56,6 @@ def check_constraint(*, expr: Q, name: str) -> models.CheckConstraint:
     if DJANGO_VERSION >= (5, 1):
         return models.CheckConstraint(condition=expr, name=name)
     return models.CheckConstraint(check=expr, name=name)
-
-
-def normalize_usd_rates(raw_rates: object) -> dict[str, Decimal]:
-    rates: dict[str, Decimal] = {"USD": Decimal("1")}
-    if not isinstance(raw_rates, dict):
-        return rates
-
-    for code, raw_value in raw_rates.items():
-        ccy = normalize_code(code)
-        value = to_decimal(raw_value)
-        if not ccy or value is None or value <= 0:
-            continue
-        rates[ccy] = value
-
-    rates["USD"] = Decimal("1")
-    return rates
-
 
 def _as_utc_minute(dt: datetime) -> datetime:
     value = dt
@@ -156,3 +114,26 @@ def build_bucket_axis(start_time: datetime, end_time: datetime, level: str) -> t
         buckets.append(current)
         current = next_bucket(current, level)
     return buckets, axis_start, axis_end
+
+
+def _format_log_value(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _format_log_fields(**fields: Any) -> str:
+    items = []
+    for key in sorted(fields.keys()):
+        items.append(f"{key}={_format_log_value(fields[key])}")
+    return " ".join(items)
+
+
+def log_info(logger, event: str, **fields: Any) -> None:
+    payload = _format_log_fields(**fields)
+    if payload:
+        logger.info("%s %s", event, payload)
+        return
+    logger.info("%s", event)

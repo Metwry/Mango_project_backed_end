@@ -2,10 +2,10 @@ from django.db import transaction as db_transaction
 from rest_framework.exceptions import ValidationError
 
 from accounts.models import Accounts, is_system_investment_account
-from investment.services.account_service import sync_investment_account_for_user
-from common.utils import normalize_code
+from common.normalize import normalize_code
+from market.services.fx_rates import convert_amount_or_raise
+from .investment_account_sync import sync_investment_account_for_user
 
-from .currency_service import convert_amount_or_raise
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 

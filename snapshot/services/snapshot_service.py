@@ -10,17 +10,10 @@ from django.utils import timezone
 
 from accounts.models import Accounts, is_system_investment_account
 from investment.models import Position
-from market.services.data.quote_cache import build_quote_index, get_market_data_payload
-from market.services.data.rates import get_fx_rates
-from common.utils import (
-    floor_bucket,
-    market_currency,
-    normalize_code,
-    normalize_usd_rates,
-    quantize_decimal,
-    strip_market_suffix,
-    to_decimal,
-)
+from market.services.fx_rates import get_fx_rates
+from market.services.quote_cache import build_quote_index, get_market_data_payload
+from common.normalize import normalize_code, normalize_usd_rates, strip_market_suffix
+from common.utils import floor_bucket, market_currency, quantize_decimal, to_decimal
 
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
 

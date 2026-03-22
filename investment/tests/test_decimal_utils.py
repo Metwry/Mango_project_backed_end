@@ -7,10 +7,11 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounts.models import Accounts
-from common.utils import format_decimal_str, normalize_decimal
+from common.normalize import normalize_decimal
+from common.utils import format_decimal_str
 from investment.models import InvestmentRecord
 from market.models import Instrument
-from market.services.data.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.quote_cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
 
 
 def _seed_usd_rates():

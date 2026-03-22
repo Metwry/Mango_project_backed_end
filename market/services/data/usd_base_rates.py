@@ -6,20 +6,16 @@ from datetime import datetime
 from django.core.cache import cache
 from django.utils import timezone
 
-from common.logging_utils import log_info
-from common.utils import normalize_code, safe_payload_data
+from common.normalize import normalize_code
+from common.utils import log_info, safe_payload_data
 
-from .cache import FX_REFRESH_INTERVAL, USD_EXCHANGE_RATES_KEY, UTC8, WATCHLIST_QUOTES_KEY
+from ..quote_cache import FX_REFRESH_INTERVAL, USD_EXCHANGE_RATES_KEY, UTC8, WATCHLIST_QUOTES_KEY
+from .quote_fetch import USD_MAINSTREAM_CURRENCIES, pull_usd_exchange_rates
 
 logger = logging.getLogger(__name__)
 
 
-def pull_usd_exchange_rates(*args, **kwargs):
-    from accounts.services.quote_fetcher import pull_usd_exchange_rates as impl
-
-    return impl(*args, **kwargs)
-
-
+# 解析缓存中的 ISO 时间字符串。
 def _parse_iso_datetime(raw: object) -> datetime | None:
     if not isinstance(raw, str) or not raw.strip():
         return None
@@ -32,9 +28,8 @@ def _parse_iso_datetime(raw: object) -> datetime | None:
     return dt
 
 
+# 判断当前是否需要刷新美元基准汇率。
 def _need_refresh_usd_base_rate(now_local: datetime) -> bool:
-    from accounts.services.quote_fetcher import USD_MAINSTREAM_CURRENCIES
-
     payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}
     if not isinstance(payload, dict):
         return True
@@ -54,12 +49,14 @@ def _need_refresh_usd_base_rate(now_local: datetime) -> bool:
     return now_local - last_updated.astimezone(UTC8) >= FX_REFRESH_INTERVAL
 
 
+# 从市场行情快照中提取外汇行情列表。
 def _extract_fx_rows(market_data: dict | None) -> list[dict]:
     payload = market_data if isinstance(market_data, dict) else (cache.get(WATCHLIST_QUOTES_KEY) or {})
     fx_rows = safe_payload_data(payload).get("FX", [])
     return fx_rows if isinstance(fx_rows, list) else []
 
 
+# 刷新并写入美元基准汇率快照。
 def pull_usd_base_rate(*, now_local: datetime | None = None, market_data: dict | None = None) -> dict:
     current_time = now_local or timezone.now().astimezone(UTC8)
     payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}

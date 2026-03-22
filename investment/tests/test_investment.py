@@ -11,9 +11,9 @@ from rest_framework.test import APIClient, APITestCase
 
 from accounts.models import Accounts, Transaction
 from investment.models import InvestmentRecord, Position
-from investment.services.account_service import INVESTMENT_ACCOUNT_NAME
+from accounts.services.investment_account_sync import INVESTMENT_ACCOUNT_NAME
 from market.models import Instrument, UserInstrumentSubscription
-from market.services.data.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.quote_cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
 
 
 def _seed_usd_rates():

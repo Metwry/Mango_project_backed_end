@@ -3,7 +3,8 @@ from decimal import Decimal
 from rest_framework import serializers
 
 
-from common.utils import format_decimal_str, normalize_datetime_to_utc, quantize_decimal
+from common.normalize import normalize_datetime_to_utc
+from common.utils import format_decimal_str, quantize_decimal
 
 from .models import InvestmentRecord, Position
 

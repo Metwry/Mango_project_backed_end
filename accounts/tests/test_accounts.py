@@ -12,11 +12,10 @@ from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
 
 from accounts.models import Accounts, Transaction
-from accounts.services.quote_providers import fetch_crypto_quotes_binance
 from investment.models import Position
 from market.models import Instrument
-from market.services.data.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
-from accounts.services.quote_providers import _to_billion_amount
+from market.services.quote_cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.data.quote_providers import _to_billion_amount, fetch_crypto_quotes_binance
 from snapshot.models import AccountSnapshot, SnapshotDataStatus, SnapshotLevel
 
 
@@ -29,8 +28,8 @@ class QuoteFetcherUnitTests(SimpleTestCase):
 
 
 class CryptoQuoteProviderTests(SimpleTestCase):
-    @patch("accounts.services.quote_providers._get_binance_supported_symbols", return_value={"BTCUSDT"})
-    @patch("accounts.services.quote_providers.requests.get")
+    @patch("market.services.data.quote_providers._get_binance_supported_symbols", return_value={"BTCUSDT"})
+    @patch("market.services.data.quote_providers.requests.get")
     def test_fetch_crypto_quotes_binance_filters_unsupported_symbols(self, mock_get, _mock_supported):
         """验证fetch crypto quotes binance 会过滤不支持的符号。"""
         def _mock_response(url, *args, **kwargs):
@@ -480,7 +479,7 @@ class AccountsBasicApiTests(APITestCase):
         )
 
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(Transaction.objects.count(), 0)
+        self.assertEqual(Transaction.objects.filter(user=self.user).count(), 0)
         investment_account.refresh_from_db()
         self.assertEqual(investment_account.balance, Decimal("999.99"))
 
@@ -1088,7 +1087,7 @@ class AccountsComplexApiTests(TransactionTestCase):
             name="Bank CNY",
             type=Accounts.AccountType.BANK,
             currency="CNY",
-            balance=Decimal("1000.00"),
+            balance=Decimal("1100.00"),
             status=Accounts.Status.ACTIVE,
         )
         self.tx = Transaction.objects.create(
@@ -1096,6 +1095,7 @@ class AccountsComplexApiTests(TransactionTestCase):
             account=self.account,
             counterparty="工资",
             amount=Decimal("100.00"),
+            balance_after=Decimal("1100.00"),
             category_name="收入",
         )
 

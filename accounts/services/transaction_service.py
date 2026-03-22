@@ -7,8 +7,8 @@ from rest_framework.exceptions import NotFound, ValidationError
 from accounts.models import Accounts, Transaction, is_system_investment_account
 from investment.models import InvestmentRecord
 from common.utils import quantize_decimal
+from market.services.fx_rates import convert_amount_or_raise
 
-from .currency_service import convert_amount_or_raise
 
 ACCOUNT_PRECISION = Decimal("0.01")
 TRANSFER_CATEGORY = "转账"

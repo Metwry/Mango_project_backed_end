@@ -12,7 +12,6 @@ LOG_DIR="resource/tmp_celery_logs"
 STATE_DIR="resource/tmp_celery_state"
 FOLLOW_LOGS="0"
 TAIL_LINES="50"
-FAKE_PROVIDER="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -55,10 +54,6 @@ while [[ $# -gt 0 ]]; do
     --tail-lines)
       TAIL_LINES="$2"
       shift 2
-      ;;
-    --fake-provider)
-      FAKE_PROVIDER="1"
-      shift
       ;;
     *)
       echo "Unknown arg: $1" >&2
@@ -142,7 +137,6 @@ start_proc() {
   local logfile="$3"
   (
     cd "$PROJECT_ROOT" || exit 1
-    [[ "$FAKE_PROVIDER" == "1" ]] && export MARKET_QUOTE_PROVIDER="fake"
     exec "${PYTHON_BIN}" -m celery ${command} >"${logfile}" 2>&1
   ) &
   echo "$!"

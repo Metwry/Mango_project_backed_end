@@ -74,11 +74,13 @@ CORE_INDEX_DEFINITIONS: tuple[IndexDefinition, ...] = (
 )
 
 
+# 按市场筛选核心指数定义列表。
 def index_definitions_for_markets(markets: set[str] | list[str] | tuple[str, ...]) -> list[IndexDefinition]:
     allow = {str(market or "").strip().upper() for market in markets if str(market or "").strip()}
     return [item for item in CORE_INDEX_DEFINITIONS if item.market in allow]
 
 
+# 根据统一 symbol 查找核心指数定义。
 def index_definition_by_symbol(symbol: str) -> IndexDefinition | None:
     target = str(symbol or "").strip().upper()
     for item in CORE_INDEX_DEFINITIONS:

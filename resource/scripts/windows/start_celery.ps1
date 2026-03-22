@@ -8,8 +8,7 @@ param(
     [string]$LogDir = "resource/tmp_celery_logs",
     [string]$StateDir = "resource/tmp_celery_state",
     [switch]$FollowLogs,
-    [int]$TailLines = 50,
-    [switch]$FakeProvider
+    [int]$TailLines = 50
 )
 
 $ErrorActionPreference = "Stop"
@@ -132,9 +131,6 @@ $commands = @{
 }
 
 $processEnv = @{}
-if ($FakeProvider) {
-    $processEnv["MARKET_QUOTE_PROVIDER"] = "fake"
-}
 
 $records = @()
 if ($WithBeat) {

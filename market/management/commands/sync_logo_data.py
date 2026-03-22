@@ -9,7 +9,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from market.models import Instrument
-from market.services.logo_service import build_logo_metadata, extract_logo_theme_color
+from market.services.instrument_logo import build_logo_metadata, extract_logo_theme_color
 
 
 @dataclass

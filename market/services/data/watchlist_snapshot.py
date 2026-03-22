@@ -7,13 +7,21 @@ from datetime import datetime, timezone as dt_timezone
 from django.core.cache import cache
 from django.utils import timezone
 
-from common.logging_utils import log_info
-from common.utils import normalize_code, resolve_short_code, safe_payload_data
+from common.normalize import normalize_code, resolve_short_code
+from common.utils import log_info, safe_payload_data
 
-from ..subscription.service import global_subscription_meta_by_market
-from .cache import UTC8, WATCHLIST_QUOTES_KEY, WATCHLIST_QUOTES_MARKET_KEY_PREFIX
-from .pull_guard import GuardDecision, resolve_due_markets
-from .quote_rows import index_rows_by_code, market_rows, quote_code, snapshot_code_set
+from ..quote_cache import (
+    UTC8,
+    WATCHLIST_QUOTES_KEY,
+    WATCHLIST_QUOTES_MARKET_KEY_PREFIX,
+    index_rows_by_code,
+    market_rows,
+    quote_code,
+    snapshot_code_set,
+)
+from ..instrument_subscriptions import global_subscription_meta_by_market
+from ..market_schedule import GuardDecision, resolve_due_markets
+from .quote_fetch import pull_watchlist_quotes
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +40,19 @@ class _PullPlan:
     guard_decisions: dict[str, GuardDecision]
 
 
-def pull_watchlist_quotes(*args, **kwargs):
-    from accounts.services.quote_fetcher import pull_watchlist_quotes as impl
+# 构造无订阅场景下的空市场快照。
+def _empty_market_payload(now_local: datetime) -> dict:
+    return {
+        "updated_at": now_local.isoformat(),
+        "bootstrap_mode": False,
+        "updated_markets": [],
+        "stale_markets": [],
+        "guard_due_markets": [],
+        "data": {},
+    }
 
-    return impl(*args, **kwargs)
 
-
+# 按订阅代码集合过滤市场快照内容。
 def _filter_by_subscription(
     market_snapshot: dict[str, list[dict]],
     subscription_codes: dict[str, set[str]],
@@ -48,6 +63,7 @@ def _filter_by_subscription(
     }
 
 
+# 根据标的元数据构造空白行情行。
 def _build_null_quote_row(meta: dict) -> dict:
     short_code = resolve_short_code(meta.get("short_code"), meta.get("symbol"))
     return {
@@ -64,6 +80,7 @@ def _build_null_quote_row(meta: dict) -> dict:
     }
 
 
+# 将行情行与标的元数据合并。
 def _row_with_meta(row: dict, meta: dict) -> dict:
     merged = dict(row)
     merged["short_code"] = normalize_code(merged.get("short_code")) or normalize_code(meta.get("short_code"))
@@ -73,6 +90,7 @@ def _row_with_meta(row: dict, meta: dict) -> dict:
     return merged
 
 
+# 将最新行情、旧缓存和空白占位合并为完整快照。
 def _merge_with_fallback(
     previous_data: dict[str, list[dict]],
     latest_quotes: dict[str, list[dict]],
@@ -105,6 +123,7 @@ def _merge_with_fallback(
     return merged, reused_previous, filled_null
 
 
+# 找出快照中仍然缺失的订阅代码。
 def _missing_subscription_codes(
     snapshot: dict[str, list[dict]],
     subscription_codes: dict[str, set[str]],
@@ -118,6 +137,7 @@ def _missing_subscription_codes(
     return missing
 
 
+# 构建本次行情拉取所需的上下文数据。
 def _build_context(now_local: datetime) -> _PullContext:
     previous_payload = cache.get(WATCHLIST_QUOTES_KEY) or {}
     previous_data = safe_payload_data(previous_payload)
@@ -131,48 +151,37 @@ def _build_context(now_local: datetime) -> _PullContext:
     )
 
 
+# 根据上下文生成本次行情拉取计划。
 def _build_plan(context: _PullContext) -> _PullPlan:
     due_markets, guard_decisions = resolve_due_markets(
         context.subscription_codes.keys(),
         now_utc=context.now_local.astimezone(dt_timezone.utc),
     )
-    return _PullPlan(
-        due_markets=due_markets,
-        guard_decisions=guard_decisions,
-    )
+    return _PullPlan(due_markets=due_markets, guard_decisions=guard_decisions)
 
 
+# 记录各市场的拉取守卫决策日志。
 def _log_guard_decisions(guard_decisions: dict[str, GuardDecision]) -> None:
     for market, decision in sorted(guard_decisions.items()):
-        if decision.should_pull:
-            log_info(
-                logger,
-                "calendar.guard.due",
-                market=market,
-                session=decision.session,
-                reason=decision.reason,
-            )
-        else:
-            log_info(
-                logger,
-                "calendar.guard.skip",
-                market=market,
-                session=decision.session,
-                reason=decision.reason,
-            )
-
-
-def _pull_due_markets(plan: _PullPlan) -> dict[str, list[dict]]:
-    _log_guard_decisions(plan.guard_decisions)
-
-    if plan.due_markets:
-        return pull_watchlist_quotes(
-            force_fetch_all_markets=False,
-            allowed_markets=plan.due_markets,
+        event = "calendar.guard.due" if decision.should_pull else "calendar.guard.skip"
+        log_info(
+            logger,
+            event,
+            market=market,
+            session=decision.session,
+            reason=decision.reason,
         )
-    return {}
 
 
+# 拉取当前计划中到期市场的行情数据。
+def _fetch_due_quotes(plan: _PullPlan) -> dict[str, list[dict]]:
+    _log_guard_decisions(plan.guard_decisions)
+    if not plan.due_markets:
+        return {}
+    return pull_watchlist_quotes(allowed_markets=plan.due_markets)
+
+
+# 组装最终要写入缓存的市场快照负载。
 def _build_payload(
     context: _PullContext,
     merged_data: dict[str, list[dict]],
@@ -191,7 +200,8 @@ def _build_payload(
     }
 
 
-def _write_market_cache(payload: dict, previous_data: dict[str, list[dict]]) -> None:
+# 将市场快照及分市场缓存写入存储。
+def _persist_market_snapshot(payload: dict, previous_data: dict[str, list[dict]]) -> None:
     cache.set(WATCHLIST_QUOTES_KEY, payload, timeout=None)
     removed_markets = set(previous_data.keys()) - set(payload["data"].keys())
     for market in removed_markets:
@@ -217,67 +227,60 @@ def _write_market_cache(payload: dict, previous_data: dict[str, list[dict]]) -> 
         )
 
 
-def _sync_investment_account_balances() -> None:
-    from investment.models import Position
-    from investment.services.account_service import sync_investment_accounts_for_users
-
-    active_position_user_ids = (
-        Position.objects
-        .filter(quantity__gt=0)
-        .values_list("user_id", flat=True)
-        .distinct()
-    )
-    sync_result = sync_investment_accounts_for_users(user_ids=active_position_user_ids)
-    failed_user_ids = sync_result.get("failed_user_ids") or []
-    if failed_user_ids:
-        logger.warning("投资账户余额同步部分失败 failed_user_ids=%s", failed_user_ids)
+# 在发生回退补齐时输出告警日志。
+def _warn_merge_result(*, reused_previous: int, filled_null: int) -> None:
+    if reused_previous or filled_null:
+        logger.warning("行情抓取回退生效 reused_previous=%s filled_null=%s", reused_previous, filled_null)
 
 
+# 在快照仍有缺口时输出告警日志。
+def _warn_missing_quotes(
+    *,
+    snapshot: dict[str, list[dict]],
+    subscription_codes: dict[str, set[str]],
+    previous_data: dict[str, list[dict]],
+    quotes: dict[str, list[dict]],
+) -> None:
+    missing_after = _missing_subscription_codes(snapshot, subscription_codes)
+    if missing_after:
+        logger.warning("行情补齐后仍有缺口 missing=%s", {k: sorted(v) for k, v in missing_after.items()})
+    elif not previous_data and quotes:
+        logger.warning("首次任务启动，已执行全市场初始化拉取")
+
+
+# 执行一次完整的自选市场行情同步。
 def pull_market(*, now_local: datetime | None = None) -> dict:
     current_time = now_local or timezone.now().astimezone(UTC8)
     context = _build_context(current_time)
     if not (context.subscription_codes or context.previous_data):
-        payload = {
-            "updated_at": current_time.isoformat(),
-            "bootstrap_mode": False,
-            "updated_markets": [],
-            "stale_markets": [],
-            "guard_due_markets": [],
-            "data": {},
-        }
+        payload = _empty_market_payload(current_time)
         log_info(logger, "watchlist.snapshot.skip_sync", reason="no_subscription_and_no_cache")
         return payload
 
     plan = _build_plan(context)
-    quotes = _pull_due_markets(plan)
+    latest_quotes = _fetch_due_quotes(plan)
     merged_data, reused_previous, filled_null = _merge_with_fallback(
         context.previous_data,
-        quotes,
+        latest_quotes,
         context.subscription_meta,
     )
     merged_data = _filter_by_subscription(merged_data, context.subscription_codes)
-    if reused_previous or filled_null:
-        logger.warning("行情抓取回退生效 reused_previous=%s filled_null=%s", reused_previous, filled_null)
+    _warn_merge_result(reused_previous=reused_previous, filled_null=filled_null)
+    _warn_missing_quotes(
+        snapshot=merged_data,
+        subscription_codes=context.subscription_codes,
+        previous_data=context.previous_data,
+        quotes=latest_quotes,
+    )
 
-    missing_after = _missing_subscription_codes(merged_data, context.subscription_codes)
-    if missing_after:
-        logger.warning("行情补齐后仍有缺口 missing=%s", {k: sorted(v) for k, v in missing_after.items()})
-    elif not context.previous_data and quotes:
-        logger.warning("首次任务启动，已执行全市场初始化拉取")
-
-    payload = _build_payload(context, merged_data, quotes, plan.due_markets)
+    payload = _build_payload(context, merged_data, latest_quotes, plan.due_markets)
 
     try:
-        _write_market_cache(payload, context.previous_data)
+        _persist_market_snapshot(payload, context.previous_data)
     except Exception:
         logger.exception("写入自选行情到 Redis 失败")
 
-    try:
-        _sync_investment_account_balances()
-    except Exception:
-        logger.exception("同步投资账户余额失败")
-
-    if not quotes and context.previous_data:
+    if not latest_quotes and context.previous_data:
         log_info(logger, "watchlist.snapshot.no_market_update", stale_markets=payload["stale_markets"])
 
     return payload

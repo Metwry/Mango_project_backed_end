@@ -12,13 +12,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from django.conf import settings
-from market.services.data.utils import (
+from market.services.market_utils import (
     MARKET_CN,
     MARKET_CRYPTO,
     MARKET_FX,
     MARKET_HK,
     MARKET_US,
-    should_fetch_market,
 )
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
