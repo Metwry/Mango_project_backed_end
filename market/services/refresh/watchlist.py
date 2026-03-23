@@ -10,18 +10,19 @@ from django.utils import timezone
 from common.normalize import normalize_code, resolve_short_code
 from common.utils import log_info, safe_payload_data
 
-from ..quote_cache import (
+from ..pricing.cache import (
     UTC8,
     WATCHLIST_QUOTES_KEY,
-    WATCHLIST_QUOTES_MARKET_KEY_PREFIX,
+    get_market_data_payload,
     index_rows_by_code,
+    instrument_market_cache_key,
     market_rows,
     quote_code,
     snapshot_code_set,
 )
-from ..instrument_subscriptions import global_subscription_meta_by_market
-from ..market_schedule import GuardDecision, resolve_due_markets
-from .quote_fetch import pull_watchlist_quotes
+from ..instruments.subscriptions import global_subscription_meta_by_market
+from ..pricing.schedule import GuardDecision, resolve_due_markets
+from ..sources.fetch import pull_single_instrument_quote, pull_watchlist_quotes
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +45,6 @@ class _PullPlan:
 def _empty_market_payload(now_local: datetime) -> dict:
     return {
         "updated_at": now_local.isoformat(),
-        "bootstrap_mode": False,
-        "updated_markets": [],
-        "stale_markets": [],
-        "guard_due_markets": [],
         "data": {},
     }
 
@@ -139,7 +136,7 @@ def _missing_subscription_codes(
 
 # 构建本次行情拉取所需的上下文数据。
 def _build_context(now_local: datetime) -> _PullContext:
-    previous_payload = cache.get(WATCHLIST_QUOTES_KEY) or {}
+    previous_payload = get_market_data_payload()
     previous_data = safe_payload_data(previous_payload)
     subscription_meta = global_subscription_meta_by_market()
     subscription_codes = {market: set(meta.keys()) for market, meta in subscription_meta.items()}
@@ -158,6 +155,21 @@ def _build_plan(context: _PullContext) -> _PullPlan:
         now_utc=context.now_local.astimezone(dt_timezone.utc),
     )
     return _PullPlan(due_markets=due_markets, guard_decisions=guard_decisions)
+
+
+# Celery 首次启动时强制拉取所有已订阅市场，避免仅因时段守卫而写入空占位。
+def _build_force_bootstrap_plan(context: _PullContext) -> _PullPlan:
+    due_markets = set(context.subscription_codes.keys())
+    decisions = {
+        market: GuardDecision(
+            market=market,
+            should_pull=True,
+            reason="bootstrap_force",
+            session="bootstrap",
+        )
+        for market in sorted(due_markets)
+    }
+    return _PullPlan(due_markets=due_markets, guard_decisions=decisions)
 
 
 # 记录各市场的拉取守卫决策日志。
@@ -181,21 +193,51 @@ def _fetch_due_quotes(plan: _PullPlan) -> dict[str, list[dict]]:
     return pull_watchlist_quotes(allowed_markets=plan.due_markets)
 
 
+# 批量拉取缺项时，首次初始化再逐条补拉一次，尽量避免空行情占位。
+def _backfill_missing_quotes(
+    *,
+    latest_quotes: dict[str, list[dict]],
+    subscription_meta: dict[str, dict[str, dict]],
+) -> dict[str, list[dict]]:
+    missing_before = _missing_subscription_codes(latest_quotes, {
+        market: set(meta.keys()) for market, meta in subscription_meta.items()
+    })
+    if not missing_before:
+        return latest_quotes
+
+    recovered = 0
+    remaining: dict[str, list[str]] = {}
+    for market, codes in missing_before.items():
+        for code in sorted(codes):
+            meta = subscription_meta.get(market, {}).get(code, {})
+            quote_row = pull_single_instrument_quote(
+                symbol=str(meta.get("symbol") or ""),
+                short_code=str(meta.get("short_code") or code),
+                name=str(meta.get("name") or code),
+                market=market,
+            )
+            if quote_row:
+                latest_quotes.setdefault(market, []).append(quote_row)
+                recovered += 1
+            else:
+                remaining.setdefault(market, []).append(code)
+
+    if recovered or remaining:
+        logger.warning(
+            "启动初始化单条补拉 completed=%s remaining=%s",
+            recovered,
+            remaining,
+        )
+    return latest_quotes
+
+
 # 组装最终要写入缓存的市场快照负载。
 def _build_payload(
     context: _PullContext,
     merged_data: dict[str, list[dict]],
-    quotes: dict[str, list[dict]],
-    due_markets: set[str],
 ) -> dict:
-    updated_markets = set(quotes.keys())
-    stale_markets = sorted(set(merged_data.keys()) - updated_markets)
     return {
         "updated_at": context.now_local.isoformat(),
-        "bootstrap_mode": not context.previous_data,
-        "updated_markets": sorted(updated_markets),
-        "stale_markets": stale_markets,
-        "guard_due_markets": sorted(due_markets),
         "data": merged_data,
     }
 
@@ -205,22 +247,15 @@ def _persist_market_snapshot(payload: dict, previous_data: dict[str, list[dict]]
     cache.set(WATCHLIST_QUOTES_KEY, payload, timeout=None)
     removed_markets = set(previous_data.keys()) - set(payload["data"].keys())
     for market in removed_markets:
-        cache.delete(f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}{market}")
+        cache.delete(instrument_market_cache_key(market))
 
-    updated_markets = set(payload["updated_markets"])
-    stale_markets = set(payload["stale_markets"])
     for market, market_quotes in payload["data"].items():
-        market_key = f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}{market}"
-        existing_market_payload = cache.get(market_key)
-        existing_pulled_at = existing_market_payload.get("pulled_at") if isinstance(existing_market_payload, dict) else None
-        pulled_at = payload["updated_at"] if market in updated_markets else existing_pulled_at
+        market_key = instrument_market_cache_key(market)
         cache.set(
             market_key,
             {
                 "updated_at": payload["updated_at"],
-                "pulled_at": pulled_at,
                 "market": market,
-                "stale": market in stale_markets,
                 "data": market_quotes,
             },
             timeout=None,
@@ -249,7 +284,7 @@ def _warn_missing_quotes(
 
 
 # 执行一次完整的自选市场行情同步。
-def pull_market(*, now_local: datetime | None = None) -> dict:
+def refresh_watchlist(*, now_local: datetime | None = None, force_full_fetch: bool = False) -> dict:
     current_time = now_local or timezone.now().astimezone(UTC8)
     context = _build_context(current_time)
     if not (context.subscription_codes or context.previous_data):
@@ -257,8 +292,13 @@ def pull_market(*, now_local: datetime | None = None) -> dict:
         log_info(logger, "watchlist.snapshot.skip_sync", reason="no_subscription_and_no_cache")
         return payload
 
-    plan = _build_plan(context)
+    plan = _build_force_bootstrap_plan(context) if force_full_fetch else _build_plan(context)
     latest_quotes = _fetch_due_quotes(plan)
+    if force_full_fetch:
+        latest_quotes = _backfill_missing_quotes(
+            latest_quotes=latest_quotes,
+            subscription_meta=context.subscription_meta,
+        )
     merged_data, reused_previous, filled_null = _merge_with_fallback(
         context.previous_data,
         latest_quotes,
@@ -273,7 +313,7 @@ def pull_market(*, now_local: datetime | None = None) -> dict:
         quotes=latest_quotes,
     )
 
-    payload = _build_payload(context, merged_data, latest_quotes, plan.due_markets)
+    payload = _build_payload(context, merged_data)
 
     try:
         _persist_market_snapshot(payload, context.previous_data)
@@ -281,6 +321,6 @@ def pull_market(*, now_local: datetime | None = None) -> dict:
         logger.exception("写入自选行情到 Redis 失败")
 
     if not latest_quotes and context.previous_data:
-        log_info(logger, "watchlist.snapshot.no_market_update", stale_markets=payload["stale_markets"])
+        log_info(logger, "watchlist.snapshot.no_market_update")
 
     return payload

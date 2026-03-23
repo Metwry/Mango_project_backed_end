@@ -93,7 +93,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
         raise ValidationError({"message": "请使用 DELETE /api/user/transactions/delete/?id=<交易ID> 或 ?source=<类型>。"})
 
     @action(detail=False, methods=["delete"], url_path="delete")
-    # edd 通过查询参数选择按单条 id 或 source 批量删除。
+    # ed 通过查询参数选择按单条 id 或 source 批量删除。
     def delete_records(self, request):
         serializer = TransactionDeleteQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)

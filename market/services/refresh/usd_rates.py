@@ -9,8 +9,8 @@ from django.utils import timezone
 from common.normalize import normalize_code
 from common.utils import log_info, safe_payload_data
 
-from ..quote_cache import FX_REFRESH_INTERVAL, USD_EXCHANGE_RATES_KEY, UTC8, WATCHLIST_QUOTES_KEY
-from .quote_fetch import USD_MAINSTREAM_CURRENCIES, pull_usd_exchange_rates
+from ..pricing.cache import FX_REFRESH_INTERVAL, USD_EXCHANGE_RATES_KEY, UTC8, get_market_data_payload, get_usd_rate_payload
+from ..sources.fetch import USD_MAINSTREAM_CURRENCIES, pull_usd_exchange_rates
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,7 @@ def _parse_iso_datetime(raw: object) -> datetime | None:
 
 # 判断当前是否需要刷新美元基准汇率。
 def _need_refresh_usd_base_rate(now_local: datetime) -> bool:
-    payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}
-    if not isinstance(payload, dict):
-        return True
+    payload = get_usd_rate_payload()
     rates = payload.get("rates")
     if not isinstance(rates, dict):
         return True
@@ -51,15 +49,15 @@ def _need_refresh_usd_base_rate(now_local: datetime) -> bool:
 
 # 从市场行情快照中提取外汇行情列表。
 def _extract_fx_rows(market_data: dict | None) -> list[dict]:
-    payload = market_data if isinstance(market_data, dict) else (cache.get(WATCHLIST_QUOTES_KEY) or {})
+    payload = market_data if isinstance(market_data, dict) else get_market_data_payload()
     fx_rows = safe_payload_data(payload).get("FX", [])
     return fx_rows if isinstance(fx_rows, list) else []
 
 
 # 刷新并写入美元基准汇率快照。
-def pull_usd_base_rate(*, now_local: datetime | None = None, market_data: dict | None = None) -> dict:
+def refresh_usd_rates(*, now_local: datetime | None = None, market_data: dict | None = None) -> dict:
     current_time = now_local or timezone.now().astimezone(UTC8)
-    payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}
+    payload = get_usd_rate_payload()
     existing_rates = payload.get("rates") if isinstance(payload, dict) else {}
     existing_count = len(existing_rates) if isinstance(existing_rates, dict) else 0
 

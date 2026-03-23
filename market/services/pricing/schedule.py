@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable
 
-from .market_utils import normalize_market_code, should_fetch_market, should_pull_market_tick
+from .utils import normalize_market_code, should_fetch_market, should_pull_market_tick
 
 
 @dataclass(frozen=True)

@@ -14,8 +14,8 @@ from rest_framework.test import APIClient, APITestCase
 from accounts.models import Accounts, Transaction
 from investment.models import Position
 from market.models import Instrument
-from market.services.quote_cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
-from market.services.data.quote_providers import _to_billion_amount, fetch_crypto_quotes_binance
+from market.services.pricing.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.sources.providers import _to_billion_amount, fetch_crypto_quotes_binance
 from snapshot.models import AccountSnapshot, SnapshotDataStatus, SnapshotLevel
 
 
@@ -28,8 +28,8 @@ class QuoteFetcherUnitTests(SimpleTestCase):
 
 
 class CryptoQuoteProviderTests(SimpleTestCase):
-    @patch("market.services.data.quote_providers._get_binance_supported_symbols", return_value={"BTCUSDT"})
-    @patch("market.services.data.quote_providers.requests.get")
+    @patch("market.services.sources.providers._get_binance_supported_symbols", return_value={"BTCUSDT"})
+    @patch("market.services.sources.providers.requests.get")
     def test_fetch_crypto_quotes_binance_filters_unsupported_symbols(self, mock_get, _mock_supported):
         """验证fetch crypto quotes binance 会过滤不支持的符号。"""
         def _mock_response(url, *args, **kwargs):
@@ -915,8 +915,6 @@ class AccountsBasicApiTests(APITestCase):
             WATCHLIST_QUOTES_KEY,
             {
                 "updated_at": "2026-03-04T00:00:00+08:00",
-                "updated_markets": ["US"],
-                "stale_markets": [],
                 "data": {
                     "US": [
                         {

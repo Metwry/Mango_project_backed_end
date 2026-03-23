@@ -6,11 +6,11 @@ from decimal import Decimal
 from django.db import IntegrityError, transaction
 
 from accounts.models import Accounts, Currency, SYSTEM_INVESTMENT_ACCOUNT_NAME
-from common.normalize import normalize_code, strip_market_suffix
+from common.normalize import strip_market_suffix
 from common.utils import market_currency, quantize_decimal, to_decimal
 from investment.models import Position
-from market.services.fx_rates import load_cached_usd_rates
-from market.services.quote_cache import build_quote_index, get_market_data_payload
+from market.services.pricing.cache import build_quote_index, get_market_data_payload
+from market.services.pricing.fx import load_cached_usd_rates
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ def _q_account(value: Decimal) -> Decimal:
 
 def _position_currency(position: Position) -> str:
     instrument = position.instrument
-    base_currency = normalize_code(getattr(instrument, "base_currency", ""))
+    base_currency = instrument.base_currency
     if base_currency:
         return base_currency
     return market_currency(instrument.market, "USD")
@@ -38,8 +38,8 @@ def _position_currency(position: Position) -> str:
 
 def _position_quote_price(position: Position, quote_index: dict[tuple[str, str], dict]) -> Decimal | None:
     instrument = position.instrument
-    market = normalize_code(instrument.market)
-    short_code = normalize_code(instrument.short_code) or strip_market_suffix(instrument.symbol)
+    market = instrument.market
+    short_code = instrument.short_code or strip_market_suffix(instrument.symbol)
     if not market or not short_code:
         return None
     row = quote_index.get((market, short_code))
@@ -52,7 +52,7 @@ def _position_quote_price(position: Position, quote_index: dict[tuple[str, str],
 
 
 def _position_value_native(position: Position, quote_index: dict[tuple[str, str], dict]) -> tuple[Decimal, bool]:
-    quantity = Decimal(str(position.quantity or POSITION_ZERO))
+    quantity = Decimal(str(position.quantity))
     if quantity <= 0:
         return POSITION_ZERO, False
 
@@ -60,16 +60,16 @@ def _position_value_native(position: Position, quote_index: dict[tuple[str, str]
     if quote_price is not None:
         return _q_position(quantity * quote_price), True
 
-    cost_total = Decimal(str(position.cost_total or POSITION_ZERO))
+    cost_total = Decimal(str(position.cost_total))
     if cost_total > 0:
         return _q_position(cost_total), False
 
-    avg_cost = Decimal(str(position.avg_cost or POSITION_ZERO))
+    avg_cost = Decimal(str(position.avg_cost))
     return _q_position(quantity * avg_cost), False
 
 
 def _to_usd_or_raise(amount: Decimal, currency: str, usd_rates: dict[str, Decimal]) -> Decimal:
-    ccy = normalize_code(currency) or "USD"
+    ccy = currency or "USD"
     if ccy == "USD":
         return _q_position(amount)
 
@@ -80,7 +80,7 @@ def _to_usd_or_raise(amount: Decimal, currency: str, usd_rates: dict[str, Decima
 
 
 def _from_usd_or_raise(amount_usd: Decimal, currency: str, usd_rates: dict[str, Decimal]) -> Decimal:
-    ccy = normalize_code(currency) or "USD"
+    ccy = currency or "USD"
     if ccy == "USD":
         return _q_account(amount_usd)
 
@@ -104,7 +104,7 @@ def calculate_investment_account_valuation(
     positions: list[Position],
     target_currency: str,
 ) -> InvestmentAccountValuation:
-    account_currency = normalize_code(target_currency) or "USD"
+    account_currency = target_currency or "USD"
     usd_rates = load_cached_usd_rates()
     quote_index = build_quote_index(get_market_data_payload())
 
@@ -174,7 +174,7 @@ def sync_investment_account_for_user(
                 "instrument__base_currency",
             )
         )
-        desired_currency = normalize_code(target_currency) or (normalize_code(account.currency) if account else Currency.CNY)
+        desired_currency = target_currency or (account.currency if account else Currency.CNY)
 
         if not positions:
             if account is None:
@@ -189,7 +189,7 @@ def sync_investment_account_for_user(
                 account.currency = desired_currency
                 update_fields.append("currency")
 
-            if (account.balance or POSITION_ZERO) != POSITION_ZERO:
+            if account.balance != POSITION_ZERO:
                 account.balance = POSITION_ZERO
                 update_fields.append("balance")
 
@@ -236,7 +236,7 @@ def sync_investment_account_for_user(
             account.currency = valuation.account_currency
             update_fields.append("currency")
 
-        if (account.balance or POSITION_ZERO) != valuation.balance_native:
+        if account.balance != valuation.balance_native:
             account.balance = valuation.balance_native
             update_fields.append("balance")
 
@@ -293,6 +293,6 @@ def sync_investment_accounts_after_market_refresh() -> None:
         return
 
     sync_result = sync_investment_accounts_for_users(user_ids=active_position_user_ids)
-    failed_user_ids = sync_result.get("failed_user_ids") or []
+    failed_user_ids = sync_result["failed_user_ids"]
     if failed_user_ids:
         logger.warning("投资账户余额同步部分失败 failed_user_ids=%s", failed_user_ids)

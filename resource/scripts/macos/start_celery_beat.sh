@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 CONDA_BASE="${CONDA_BASE:-/opt/anaconda3}"
 ENV_NAME="${ENV_NAME:-Back_end_project}"
 STATE_DIR="${PROJECT_ROOT}/resource/tmp_celery_state"

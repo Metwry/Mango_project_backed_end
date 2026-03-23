@@ -4,15 +4,14 @@ from rest_framework.exceptions import ValidationError
 from common.normalize import normalize_code, resolve_short_code
 from common.utils import safe_payload_data
 
-from ..models import Instrument, UserInstrumentSubscription
-from .market_utils import format_watchlist_instrument
-from .quote_cache import (
+from ...models import Instrument, UserInstrumentSubscription
+from ..pricing.cache import (
     ensure_instrument_quote,
     get_market_data_payload,
     pop_quote_by_code,
-    save_orphan_quote,
     write_market_data,
 )
+from ..pricing.utils import format_watchlist_instrument
 
 SOURCE_POSITION = "position"
 SOURCE_WATCHLIST = "watchlist"
@@ -81,7 +80,7 @@ def global_subscription_meta_by_market() -> dict[str, dict[str, dict]]:
         .distinct()
     )
     for symbol, short_code, name, market, logo_url, logo_color in rows:
-        market_code = normalize_code(market)
+        market_code = market
         code = resolve_short_code(short_code, symbol)
         if not market_code or not code:
             continue
@@ -107,7 +106,7 @@ def user_watchlist_codes_by_market(user) -> dict[str, set[str]]:
         .values_list("instrument__market", "instrument__short_code", "instrument__symbol")
     )
     for market, short_code, symbol in rows:
-        market_code = normalize_code(market)
+        market_code = market
         code = resolve_short_code(short_code, symbol)
         if not market_code or not code:
             continue
@@ -142,7 +141,7 @@ def add_watchlist_symbol(*, user, symbol: str) -> dict:
         enabled=True,
     )
     subscription = UserInstrumentSubscription.objects.get(user=user, instrument=instrument)
-    quote_ready, quote_source = ensure_instrument_quote(instrument, fetch_missing=True, use_orphan=True)
+    quote_ready, quote_source = ensure_instrument_quote(instrument, fetch_missing=True)
 
     return {
         "created": created,
@@ -196,12 +195,11 @@ def delete_watchlist_symbol(*, user, market: str, short_code: str) -> dict:
         if has_any_subscription_for_instrument(instrument_id=instrument.id):
             continue
 
-        inst_market = normalize_code(instrument.market)
-        inst_short_code = normalize_code(instrument.short_code)
+        inst_market = instrument.market
+        inst_short_code = instrument.short_code
         removed_quote = pop_quote_by_code(data, inst_market, inst_short_code)
         if removed_quote is not None:
             updated_markets.add(inst_market)
-            save_orphan_quote(inst_market, inst_short_code, removed_quote)
 
     write_market_data(payload, data, updated_markets)
 

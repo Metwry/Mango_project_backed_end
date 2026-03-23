@@ -12,8 +12,8 @@ from market.models import Instrument
 from common.exception import BusinessConflictError
 from common.normalize import normalize_decimal
 from common.utils import format_decimal_str, market_currency, quantize_decimal
-from market.services.quote_cache import ensure_instrument_quote
-from market.services.instrument_subscriptions import SOURCE_POSITION, set_user_instrument_source
+from market.services.instruments.subscriptions import SOURCE_POSITION, set_user_instrument_source
+from market.services.pricing.cache import ensure_instrument_quote
 
 from ..models import InvestmentRecord, Position
 
@@ -35,7 +35,7 @@ def quantize_account(value: Decimal) -> Decimal:
 
 # 推断某个标的交易应使用的账户币种。
 def _expected_currency_for_instrument(instrument: Instrument) -> str:
-    base_currency = str(getattr(instrument, "base_currency", "") or "").strip().upper()
+    base_currency = instrument.base_currency
     if base_currency:
         return base_currency
     return market_currency(instrument.market, "")
@@ -137,7 +137,7 @@ def _build_response(*, record: InvestmentRecord, position: Position, tx: Transac
 # 尝试预热指定标的的行情缓存，失败时静默忽略。
 def _warm_quote_snapshot_for_instrument(instrument: Instrument) -> None:
     try:
-        ensure_instrument_quote(instrument, fetch_missing=True, use_orphan=False)
+        ensure_instrument_quote(instrument, fetch_missing=True)
     except Exception:
         return
 
@@ -178,8 +178,8 @@ def execute_buy(*, user, instrument_id: int, quantity: Decimal, price: Decimal, 
             source=Transaction.Source.INVESTMENT,
         )
 
-        old_qty = position.quantity or POSITION_ZERO
-        old_cost_total = position.cost_total or POSITION_ZERO
+        old_qty = position.quantity
+        old_cost_total = position.cost_total
         new_cost_total = quantize_position(old_cost_total + cost)
         new_qty = quantize_position(old_qty + quantity)
         new_avg_cost = quantize_position(new_cost_total / new_qty) if new_qty > 0 else POSITION_ZERO
@@ -225,18 +225,18 @@ def execute_sell(*, user, instrument_id: int, quantity: Decimal, price: Decimal,
         )
         position = _lock_or_create_position(user=user, instrument=instrument, create_if_missing=False)
 
-        old_qty = position.quantity or POSITION_ZERO
+        old_qty = position.quantity
         if old_qty < quantity:
             raise ConflictError("持仓不足")
 
-        old_cost_total = position.cost_total or POSITION_ZERO
+        old_cost_total = position.cost_total
         sell_proceeds = quantity * price
         account_proceeds = quantize_account(sell_proceeds)
         _assert_trade_amount_positive(account_proceeds)
 
-        cost_released = quantize_position((position.avg_cost or POSITION_ZERO) * quantity)
+        cost_released = quantize_position(position.avg_cost * quantity)
         realized_pnl = quantize_position(sell_proceeds - cost_released)
-        old_realized_pnl_total = position.realized_pnl_total or POSITION_ZERO
+        old_realized_pnl_total = position.realized_pnl_total
         new_realized_pnl_total = quantize_position(old_realized_pnl_total + realized_pnl)
 
         new_qty = quantize_position(old_qty - quantity)

@@ -116,7 +116,7 @@ class InvestmentHistoryItemSerializer(serializers.ModelSerializer):
     @staticmethod
     def get_cash_flow_amount(obj: InvestmentRecord) -> str:
         if obj.cash_transaction_id:
-            return format_decimal_str(obj.cash_transaction.amount or Decimal("0"))
-        gross = quantize_decimal((obj.quantity or Decimal("0")) * (obj.price or Decimal("0")), Decimal("0.01"))
+            return format_decimal_str(obj.cash_transaction.amount)
+        gross = quantize_decimal(obj.quantity * obj.price, Decimal("0.01"))
         amount = gross if obj.side == InvestmentRecord.Side.SELL else Decimal("0") - gross
         return format_decimal_str(amount)

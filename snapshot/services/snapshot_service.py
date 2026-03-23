@@ -10,9 +10,9 @@ from django.utils import timezone
 
 from accounts.models import Accounts, is_system_investment_account
 from investment.models import Position
-from market.services.fx_rates import get_fx_rates
-from market.services.quote_cache import build_quote_index, get_market_data_payload
-from common.normalize import normalize_code, normalize_usd_rates, strip_market_suffix
+from market.services.pricing.cache import build_quote_index, get_market_data_payload
+from market.services.pricing.fx import get_fx_rates
+from common.normalize import normalize_usd_rates, strip_market_suffix
 from common.utils import floor_bucket, market_currency, quantize_decimal, to_decimal
 
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
@@ -80,7 +80,7 @@ def _load_usd_rates() -> tuple[dict[str, Decimal], str | None]:
 
 # 将指定币种金额转换为美元金额并返回所用汇率。
 def _to_usd(amount: Decimal, currency: str, usd_rates: dict[str, Decimal]) -> tuple[Decimal | None, Decimal | None]:
-    ccy = normalize_code(currency) or "USD"
+    ccy = currency or "USD"
     if ccy == "USD":
         return _q_amount(amount), Decimal("1")
     rate = usd_rates.get(ccy)
@@ -91,7 +91,7 @@ def _to_usd(amount: Decimal, currency: str, usd_rates: dict[str, Decimal]) -> tu
 
 # 将美元金额转换回目标币种金额并返回所用汇率。
 def _usd_to_native(amount_usd: Decimal, currency: str, usd_rates: dict[str, Decimal]) -> tuple[Decimal | None, Decimal | None]:
-    ccy = normalize_code(currency) or "USD"
+    ccy = currency or "USD"
     if ccy == "USD":
         return _q_amount(amount_usd), Decimal("1")
     rate = usd_rates.get(ccy)
@@ -103,7 +103,7 @@ def _usd_to_native(amount_usd: Decimal, currency: str, usd_rates: dict[str, Deci
 # 推断持仓标的对应的计价币种。
 def _position_currency(position: Position) -> str:
     instrument = position.instrument
-    base_currency = normalize_code(getattr(instrument, "base_currency", ""))
+    base_currency = instrument.base_currency
     if base_currency:
         return base_currency
     return market_currency(instrument.market, "USD")
@@ -165,15 +165,15 @@ def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> 
             if investment_account is None:
                 continue
 
-            market = normalize_code(position.instrument.market)
-            short_code = normalize_code(position.instrument.short_code) or strip_market_suffix(position.instrument.symbol)
+            market = position.instrument.market
+            short_code = position.instrument.short_code or strip_market_suffix(position.instrument.symbol)
             quote_row = quote_index.get((market, short_code))
             price = _quote_price(quote_row)
             currency = _position_currency(position)
 
-            quantity = _q_amount(position.quantity or ZERO)
-            avg_cost = _q_amount(position.avg_cost or ZERO)
-            realized_pnl = _q_amount(position.realized_pnl_total or ZERO)
+            quantity = _q_amount(position.quantity)
+            avg_cost = _q_amount(position.avg_cost)
+            realized_pnl = _q_amount(position.realized_pnl_total)
 
             market_value = None
             market_value_usd = None
@@ -215,7 +215,7 @@ def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> 
             position_written += 1
 
         for account in active_accounts:
-            account_currency = normalize_code(account.currency) or "USD"
+            account_currency = account.currency
 
             if is_system_investment_account(account=account):
                 agg = investment_aggregates.get(account.id, _InvestmentAggregate())
@@ -224,7 +224,7 @@ def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> 
                 status = agg.status
 
                 if native_value is None:
-                    native_value = _q_amount(account.balance or ZERO)
+                    native_value = _q_amount(account.balance)
                     if status == SnapshotDataStatus.OK:
                         status = SnapshotDataStatus.FX_MISSING
 
@@ -243,7 +243,7 @@ def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> 
                 account_written += 1
                 continue
 
-            native_balance = _q_amount(account.balance or ZERO)
+            native_balance = _q_amount(account.balance)
             converted_usd, fx_rate = _to_usd(native_balance, account_currency, usd_rates)
             status = SnapshotDataStatus.OK
             balance_usd = converted_usd

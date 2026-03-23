@@ -16,6 +16,12 @@ def safe_payload_data(payload: object) -> dict:
     data = payload.get("data")
     return data if isinstance(data, dict) else {}
 
+
+def redis_cache_key(key: str, key_prefix: str, version: int) -> str:
+    if key_prefix:
+        return f"{key_prefix}:{key}"
+    return key
+
 def to_decimal(value: object) -> Decimal | None:
     if value in (None, ""):
         return None

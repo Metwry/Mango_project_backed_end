@@ -10,10 +10,10 @@ from django.test import TestCase, override_settings
 from accounts.models import Accounts, Currency
 from investment.models import Position
 from market.models import Instrument, UserInstrumentSubscription
-from market.services.data.market_refresh import pull_data
-from market.services.quote_cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
-from market.services.data.watchlist_snapshot import pull_market
-from market.services.market_schedule import GuardDecision
+from market.services.pricing.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.pricing.schedule import GuardDecision
+from market.services.refresh.refresh_all import refresh_all
+from market.services.refresh.watchlist import refresh_watchlist
 from snapshot.models import AccountSnapshot, PositionSnapshot, SnapshotDataStatus, SnapshotLevel
 from snapshot.services.snapshot_service import capture_snapshots
 
@@ -41,8 +41,8 @@ class MarketSnapshotIntegrationTests(TestCase):
             is_active=True,
         )
 
-    @patch("market.services.data.watchlist_snapshot.pull_watchlist_quotes")
-    @patch("market.services.data.watchlist_snapshot.resolve_due_markets")
+    @patch("market.services.refresh.watchlist.pull_watchlist_quotes")
+    @patch("market.services.refresh.watchlist.resolve_due_markets")
     def test_sync_watchlist_snapshot_revalues_investment_account_balance(
         self,
         mock_resolve_due,
@@ -100,13 +100,13 @@ class MarketSnapshotIntegrationTests(TestCase):
             ]
         }
 
-        pull_data()
+        refresh_all()
 
         investment_account.refresh_from_db()
         self.assertEqual(investment_account.balance, Decimal("200.00"))
 
-    @patch("market.services.data.watchlist_snapshot.pull_watchlist_quotes")
-    @patch("market.services.data.watchlist_snapshot.resolve_due_markets")
+    @patch("market.services.refresh.watchlist.pull_watchlist_quotes")
+    @patch("market.services.refresh.watchlist.resolve_due_markets")
     def test_sync_then_capture_m15_writes_position_and_account_snapshots(
         self,
         mock_resolve_due,
@@ -154,7 +154,7 @@ class MarketSnapshotIntegrationTests(TestCase):
                 }
             ]
         }
-        pull_market()
+        refresh_watchlist()
 
         # Avoid fx service fallback network call inside capture_snapshots.
         cache.set(
@@ -207,8 +207,6 @@ class MarketSnapshotIntegrationTests(TestCase):
             WATCHLIST_QUOTES_KEY,
             {
                 "updated_at": "2026-03-04T00:00:00+00:00",
-                "updated_markets": [],
-                "stale_markets": ["US"],
                 "data": {"US": []},
             },
             timeout=None,
@@ -252,8 +250,6 @@ class MarketSnapshotIntegrationTests(TestCase):
             WATCHLIST_QUOTES_KEY,
             {
                 "updated_at": "2026-03-04T00:00:00+00:00",
-                "updated_markets": [],
-                "stale_markets": [],
                 "data": {},
             },
             timeout=None,
