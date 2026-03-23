@@ -7,7 +7,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 from accounts.models import Accounts, Transaction, is_system_investment_account
 from investment.models import InvestmentRecord
 from common.utils import quantize_decimal
-from market.services.fx_rates import convert_amount_or_raise
+from market.services.pricing.fx import convert_amount_or_raise
 
 
 ACCOUNT_PRECISION = Decimal("0.01")
@@ -54,7 +54,7 @@ def _create_transaction_row(
     if account.user_id != user.id:
         raise ValidationError("账户与当前用户不匹配。")
 
-    account.balance = (account.balance or Decimal("0")) + (amount or Decimal("0"))
+    account.balance = account.balance + amount
     account.save(update_fields=["balance", "updated_at"])
 
     return Transaction.objects.create(
@@ -81,7 +81,7 @@ def _is_linked_investment_cashflow(tx: Transaction) -> bool:
     if InvestmentRecord.objects.filter(cash_transaction_id=tx.id).exists():
         return True
 
-    side = InvestmentRecord.Side.SELL if (tx.amount or Decimal("0")) > 0 else InvestmentRecord.Side.BUY
+    side = InvestmentRecord.Side.SELL if tx.amount > 0 else InvestmentRecord.Side.BUY
     candidates = InvestmentRecord.objects.filter(
         user_id=tx.user_id,
         cash_account_id=tx.account_id,
@@ -89,9 +89,9 @@ def _is_linked_investment_cashflow(tx: Transaction) -> bool:
         side=side,
     ).only("quantity", "price")
     for row in candidates:
-        gross = quantize_decimal((row.quantity or Decimal("0")) * (row.price or Decimal("0")), ACCOUNT_PRECISION)
+        gross = quantize_decimal(row.quantity * row.price, ACCOUNT_PRECISION)
         expected_amount = gross if side == InvestmentRecord.Side.SELL else Decimal("0") - gross
-        if expected_amount == (tx.amount or Decimal("0")):
+        if expected_amount == tx.amount:
             return True
     return False
 
@@ -176,11 +176,11 @@ def _create_transfer_transaction(*, serializer, user) -> Transaction:
             from_account_id=raw_from_account.id,
             to_account_id=raw_to_account.id,
         )
-        if (from_account.balance or Decimal("0")) < amount:
+        if from_account.balance < amount:
             raise ValidationError({"amount": "转出账户余额不足。"})
 
-        from_account.balance = (from_account.balance or Decimal("0")) - amount
-        to_account.balance = (to_account.balance or Decimal("0")) + amount
+        from_account.balance = from_account.balance - amount
+        to_account.balance = to_account.balance + amount
         from_account.save(update_fields=["balance", "updated_at"])
         to_account.save(update_fields=["balance", "updated_at"])
 
@@ -284,7 +284,7 @@ def reverse_transaction(*, user, tx_id: int) -> Transaction:
 
         try:
             reversed_amount = Decimal("0") - convert_amount_or_raise(
-                amount=tx.amount or Decimal("0"),
+                amount=tx.amount,
                 from_currency=tx.currency,
                 to_currency=tx.account.currency,
             )

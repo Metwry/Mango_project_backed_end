@@ -11,7 +11,7 @@ from common.normalize import normalize_decimal
 from common.utils import format_decimal_str
 from investment.models import InvestmentRecord
 from market.models import Instrument
-from market.services.quote_cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.pricing.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
 
 
 def _seed_usd_rates():
@@ -34,8 +34,6 @@ def _seed_quotes():
         WATCHLIST_QUOTES_KEY,
         {
             "updated_at": "2026-03-02T00:00:00+08:00",
-            "updated_markets": [],
-            "stale_markets": [],
             "data": {},
         },
         timeout=None,

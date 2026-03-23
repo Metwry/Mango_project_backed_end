@@ -140,7 +140,8 @@ class FxRatesResponseSerializer(serializers.Serializer):
 
 
 class IndexSnapshotItemSerializer(serializers.Serializer):
-    instrument_id = serializers.IntegerField(required=False, allow_null=True)
+    market = serializers.CharField()
+    short_code = serializers.CharField()
     name = serializers.CharField()
     prev_close = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     day_high = serializers.CharField(required=False, allow_blank=True, allow_null=True)

@@ -16,10 +16,10 @@ from .serializers import (
     WatchlistDeleteRequestSerializer,
     WatchlistDeleteResponseSerializer,
 )
-from .services.data.index_snapshot import pull_indices
-from .services.fx_rates import get_fx_rates
-from .services.instrument_queries import build_latest_quotes, build_user_markets_snapshot, search_instruments
-from .services.instrument_subscriptions import add_watchlist_symbol, delete_watchlist_symbol
+from .services.instruments.queries import build_latest_quotes, build_user_markets_snapshot, search_instruments
+from .services.instruments.subscriptions import add_watchlist_symbol, delete_watchlist_symbol
+from .services.pricing.fx import get_fx_rates
+from .services.refresh.index import refresh_indices
 
 
 class MarketWatchlistSnapshotView(APIView):
@@ -80,7 +80,7 @@ class MarketLatestQuoteBatchView(APIView):
 class MarketIndexSnapshotView(APIView):
     # ed 返回核心指数行情快照。
     def get(self, request, *args, **kwargs):
-        payload = pull_indices()
+        payload = refresh_indices()
         serializer = IndexSnapshotResponseSerializer(instance=payload)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

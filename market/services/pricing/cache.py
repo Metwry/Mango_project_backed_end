@@ -1,25 +1,31 @@
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
-from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
 from common.normalize import normalize_code, resolve_short_code
 from common.utils import safe_payload_data
 
-from .data.quote_fetch import pull_single_instrument_quote
+from ..sources.fetch import pull_single_instrument_quote
 
-WATCHLIST_QUOTES_KEY = "watchlist:quotes:latest"
-WATCHLIST_QUOTES_MARKET_KEY_PREFIX = "watchlist:quotes:market:"
-WATCHLIST_QUOTES_ORPHAN_KEY_PREFIX = "watchlist:quotes:orphan:"
-USD_EXCHANGE_RATES_KEY = "watchlist:fx:usd-rates:latest"
-MARKET_INDEX_QUOTES_KEY = "market:index:quotes:latest"
-MARKET_INDEX_QUOTES_MARKET_KEY_PREFIX = "market:index:quotes:market:"
+WATCHLIST_QUOTES_KEY = "markets:instrument:instrument_all"
+WATCHLIST_QUOTES_MARKET_KEY_PREFIX = "markets:instrument:"
+USD_EXCHANGE_RATES_KEY = "markets:usd-base-rates"
+MARKET_INDEX_QUOTES_KEY = "markets:indices"
+CELERY_STARTUP_PULL_LOCK_KEY = "runtime:celery:startup-pull-lock"
 
-DEFAULT_WATCHLIST_ORPHAN_TTL = 30 * 60
 UTC8 = ZoneInfo("Asia/Shanghai")
 FX_REFRESH_INTERVAL = timedelta(hours=4)
+
+
+def instrument_market_cache_key(market: object) -> str:
+    return f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}{normalize_code(market)}"
+
+
+def _cache_mapping(key: str) -> dict:
+    payload = cache.get(key)
+    return payload if isinstance(payload, dict) else {}
 
 
 # 从行情行中解析统一使用的代码标识。
@@ -31,6 +37,16 @@ def quote_code(row: dict) -> str:
 def market_rows(data: dict, market: str) -> list[dict]:
     rows = data.get(market, [])
     return rows if isinstance(rows, list) else []
+
+
+def ensure_market_rows(data: dict, market: str) -> list[dict]:
+    rows = data.get(market)
+    if isinstance(rows, list):
+        return rows
+
+    normalized_rows: list[dict] = []
+    data[market] = normalized_rows
+    return normalized_rows
 
 
 # 提取行情列表中的代码集合。
@@ -49,20 +65,26 @@ def find_quote_by_code(rows: object, short_code: str) -> dict | None:
         return None
     code = normalize_code(short_code)
     for row in rows:
-        if normalize_code(row.get("short_code")) == code:
+        if not isinstance(row, dict):
+            continue
+        if quote_code(row) == code:
             return row
     return None
 
 
 # 在指定市场行情列表中插入或更新一条行情。
 def upsert_market_quote(data: dict, market: str, quote_row: dict) -> None:
-    market_quotes = data.setdefault(market, [])
-    code = normalize_code(quote_row.get("short_code"))
+    market_quotes = ensure_market_rows(data, market)
+    normalized_quote = dict(quote_row)
+    code = quote_code(normalized_quote)
+    if not code:
+        return
+    normalized_quote["short_code"] = code
     for idx, row in enumerate(market_quotes):
-        if normalize_code(row.get("short_code")) == code:
-            market_quotes[idx] = quote_row
+        if isinstance(row, dict) and quote_code(row) == code:
+            market_quotes[idx] = normalized_quote
             return
-    market_quotes.append(quote_row)
+    market_quotes.append(normalized_quote)
 
 
 # 从指定市场行情列表中移除目标代码对应的行情。
@@ -88,27 +110,17 @@ def pop_quote_by_code(data: dict, market: str, short_code: str) -> dict | None:
     return removed_row
 
 
-# 生成孤儿行情缓存使用的 key。
-def orphan_quote_cache_key(market: object, short_code: object) -> str:
-    market_code = normalize_code(market)
-    code = normalize_code(short_code)
-    return f"{WATCHLIST_QUOTES_ORPHAN_KEY_PREFIX}{market_code}:{code}"
-
-
-# 读取并规范化孤儿行情缓存的过期时间。
-def watchlist_orphan_ttl() -> int:
-    raw = getattr(settings, "WATCHLIST_ORPHAN_QUOTE_TTL", DEFAULT_WATCHLIST_ORPHAN_TTL)
-    try:
-        ttl = int(raw)
-    except (TypeError, ValueError):
-        ttl = DEFAULT_WATCHLIST_ORPHAN_TTL
-    return max(60, ttl)
-
-
 # 读取自选行情总快照缓存。
 def get_market_data_payload() -> dict:
-    payload = cache.get(WATCHLIST_QUOTES_KEY) or {}
-    return payload if isinstance(payload, dict) else {}
+    return _cache_mapping(WATCHLIST_QUOTES_KEY)
+
+
+def get_index_quote_payload() -> dict:
+    return _cache_mapping(MARKET_INDEX_QUOTES_KEY)
+
+
+def get_usd_rate_payload() -> dict:
+    return _cache_mapping(USD_EXCHANGE_RATES_KEY)
 
 
 # 将行情快照构建为按市场和代码索引的映射。
@@ -129,24 +141,10 @@ def write_market_data(payload: dict, data: dict, updated_markets: set[str]) -> N
         return
 
     updated_at = timezone.now().astimezone(UTC8).isoformat()
-    existing_updated = {
-        normalize_code(m)
-        for m in (payload.get("updated_markets") or [])
-        if isinstance(m, str)
-    }
-    existing_updated.update(updated_markets)
-
-    stale_markets = [
-        m for m in (payload.get("stale_markets") or [])
-        if normalize_code(m) not in updated_markets
-    ]
-
     next_payload = dict(payload) if isinstance(payload, dict) else {}
     next_payload.update(
         {
             "updated_at": updated_at,
-            "updated_markets": sorted(existing_updated),
-            "stale_markets": stale_markets,
             "data": data,
         }
     )
@@ -156,14 +154,13 @@ def write_market_data(payload: dict, data: dict, updated_markets: set[str]) -> N
 
     for market in updated_markets:
         rows = data.get(market, [])
-        market_key = f"{WATCHLIST_QUOTES_MARKET_KEY_PREFIX}{market}"
+        market_key = instrument_market_cache_key(market)
         if rows:
             cache.set(
                 market_key,
                 {
                     "updated_at": updated_at,
                     "market": market,
-                    "stale": False,
                     "data": rows,
                 },
                 timeout=timeout,
@@ -172,50 +169,19 @@ def write_market_data(payload: dict, data: dict, updated_markets: set[str]) -> N
             cache.delete(market_key)
 
 
-# 读取指定市场和代码的孤儿行情缓存。
-def get_orphan_quote(market: str, short_code: str) -> dict | None:
-    orphan_quote = cache.get(orphan_quote_cache_key(market, short_code))
-    return orphan_quote if isinstance(orphan_quote, dict) else None
-
-
-# 保存一条孤儿行情到缓存。
-def save_orphan_quote(market: str, short_code: str, quote_row: dict) -> str:
-    orphan_key = orphan_quote_cache_key(market, short_code)
-    cache.set(orphan_key, quote_row, timeout=watchlist_orphan_ttl())
-    return orphan_key
-
-
-# 删除指定市场和代码的孤儿行情缓存。
-def delete_orphan_quote(market: str, short_code: str) -> None:
-    cache.delete(orphan_quote_cache_key(market, short_code))
-
-
 # 确保指定标的在缓存中有可用行情并返回来源。
-def ensure_instrument_quote(instrument, fetch_missing: bool = True, use_orphan: bool = True) -> tuple[bool, str]:
-    market = normalize_code(instrument.market)
-    short_code = normalize_code(instrument.short_code)
+def ensure_instrument_quote(instrument, fetch_missing: bool = True) -> tuple[bool, str]:
+    market = instrument.market
+    short_code = instrument.short_code
     if not market or not short_code:
         return False, "none"
 
     payload = get_market_data_payload()
     data = safe_payload_data(payload)
-    existing_rows = data.get(market, [])
+    existing_rows = market_rows(data, market)
     existing_quote = find_quote_by_code(existing_rows, short_code)
     if existing_quote is not None:
         return True, "redis"
-
-    if use_orphan:
-        orphan_quote = get_orphan_quote(market, short_code)
-        if orphan_quote is not None:
-            one_quote = dict(orphan_quote)
-            one_quote["short_code"] = one_quote.get("short_code") or instrument.short_code
-            one_quote["name"] = one_quote.get("name") or instrument.name
-            one_quote["logo_url"] = instrument.logo_url or None
-            one_quote["logo_color"] = instrument.logo_color or None
-            upsert_market_quote(data, market, one_quote)
-            write_market_data(payload, data, {market})
-            delete_orphan_quote(market, short_code)
-            return True, "redis_orphan"
 
     if not fetch_missing:
         return False, "none"
@@ -229,7 +195,7 @@ def ensure_instrument_quote(instrument, fetch_missing: bool = True, use_orphan: 
     if not one_quote:
         return False, "none"
 
-    one_quote["short_code"] = one_quote.get("short_code") or instrument.short_code
+    one_quote["short_code"] = quote_code(one_quote) or instrument.short_code
     one_quote["name"] = one_quote.get("name") or instrument.name
     one_quote["logo_url"] = instrument.logo_url or None
     one_quote["logo_color"] = instrument.logo_color or None

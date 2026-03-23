@@ -5,7 +5,7 @@ from dataclasses import asdict
 from decimal import Decimal
 
 from common.utils import format_decimal_str, to_decimal
-from market.services.market_utils import (
+from market.services.pricing.utils import (
     MARKET_CN,
     MARKET_CRYPTO,
     MARKET_FX,
@@ -13,16 +13,16 @@ from market.services.market_utils import (
     MARKET_US,
 )
 
-from .quote_providers import fetch_crypto_quotes_binance, fetch_fx_quotes_with_fallback, fetch_stocks_sina
+from .providers import fetch_crypto_quotes_binance, fetch_fx_quotes_with_fallback, fetch_stocks_sina
 
 
 MarketQuoteItem = tuple[str, str, str]
-IndexQuoteItem = tuple[str, str, int, str]
+IndexQuoteItem = tuple[str, str, str, str]
 
 
 # 按市场类型分发到对应的行情 provider 批量拉取行情。
 def fetch_market_quotes(market: str, items: list[MarketQuoteItem]):
-    market_code = str(market or "").strip().upper()
+    market_code = market
     if market_code in (MARKET_CN, MARKET_HK, MARKET_US):
         return fetch_stocks_sina(market_code, items)
     if market_code == MARKET_CRYPTO:
@@ -47,10 +47,10 @@ def _safe_str_decimal(value: object) -> str | None:
 
 
 # 构造指数行情拉取失败时的空白占位行。
-def _build_null_index_row(symbol: str, instrument_id: int, name: str) -> dict:
+def _build_null_index_row(symbol: str, short_code: str, name: str) -> dict:
     return {
         "symbol": symbol,
-        "instrument_id": instrument_id,
+        "short_code": short_code,
         "name": name,
         "prev_close": None,
         "day_high": None,
@@ -86,11 +86,11 @@ def fetch_index_snapshot_rows(items: list[IndexQuoteItem]) -> list[dict]:
 
     provider_symbols: list[str] = []
     item_by_provider: dict[str, IndexQuoteItem] = {}
-    for symbol, provider_symbol, instrument_id, name in items:
+    for symbol, provider_symbol, short_code, name in items:
         if not provider_symbol:
             continue
         provider_symbols.append(provider_symbol)
-        item_by_provider[provider_symbol] = (symbol, provider_symbol, instrument_id, name)
+        item_by_provider[provider_symbol] = (symbol, provider_symbol, short_code, name)
 
     if not provider_symbols:
         return []
@@ -108,12 +108,12 @@ def fetch_index_snapshot_rows(items: list[IndexQuoteItem]) -> list[dict]:
         raise RuntimeError("index quote source returned empty data")
 
     rows: list[dict] = []
-    for provider_symbol, (symbol, _, instrument_id, name) in item_by_provider.items():
+    for provider_symbol, (symbol, _, short_code, name) in item_by_provider.items():
         close_series = _extract_series_value(frame, "Close", provider_symbol)
         high_series = _extract_series_value(frame, "High", provider_symbol)
         low_series = _extract_series_value(frame, "Low", provider_symbol)
         if close_series is None or high_series is None or low_series is None:
-            rows.append(_build_null_index_row(symbol, instrument_id, name))
+            rows.append(_build_null_index_row(symbol, short_code, name))
             continue
 
         last_close = close_series.iloc[-1]
@@ -127,7 +127,7 @@ def fetch_index_snapshot_rows(items: list[IndexQuoteItem]) -> list[dict]:
         rows.append(
             {
                 "symbol": symbol,
-                "instrument_id": instrument_id,
+                "short_code": short_code,
                 "name": name,
                 "prev_close": _safe_str_decimal(prev_close),
                 "day_high": _safe_str_decimal(high_series.iloc[-1]),

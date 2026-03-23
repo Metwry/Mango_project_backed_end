@@ -2,8 +2,7 @@ from django.db import transaction as db_transaction
 from rest_framework.exceptions import ValidationError
 
 from accounts.models import Accounts, is_system_investment_account
-from common.normalize import normalize_code
-from market.services.fx_rates import convert_amount_or_raise
+from market.services.pricing.fx import convert_amount_or_raise
 from .investment_account_sync import sync_investment_account_for_user
 
 
@@ -24,7 +23,7 @@ def get_user_accounts_queryset(*, user, include_archived: bool):
 def update_account_from_serializer(*, serializer):
     instance: Accounts = serializer.instance
     previous_currency = instance.currency
-    next_currency = normalize_code(serializer.validated_data.get("currency", previous_currency))
+    next_currency = serializer.validated_data.get("currency", previous_currency)
 
     # 处理投资账户的数据更新
     if is_system_investment_account(account=instance):
@@ -38,8 +37,6 @@ def update_account_from_serializer(*, serializer):
                 )
             except ValueError as exc:
                 raise ValidationError({"currency": str(exc)})
-            if synced is None:
-                raise ValidationError({"currency": "系统投资账户同步失败。"})
             return synced
 
     # 处理常规账户的数据更新

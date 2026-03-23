@@ -162,7 +162,8 @@ CACHES = {
     "default": {
         "BACKEND": CACHE_BACKEND,
         "LOCATION": "redis://127.0.0.1:6379/1",  # 使用 Redis 1 号数据库
-        "OPTIONS": CACHE_OPTIONS
+        "OPTIONS": CACHE_OPTIONS,
+        "KEY_FUNCTION": "common.utils.redis_cache_key",
     }
 }
 REDIS_TIMEOUT=7*24*60*60
@@ -204,7 +205,7 @@ CELERY_ENABLE_UTC = True
 
 CELERY_BEAT_SCHEDULE = {
     "pull-watchlist-quotes-every-5-minutes": {
-        "task": "market.tasks.task_pull_data",
+        "task": "market.tasks.task_refresh_all",
         "schedule": crontab(minute="*/5"),
     },
     "capture-snapshot-m15": {
@@ -234,7 +235,7 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 CELERY_TASK_ROUTES = {
-    "market.tasks.task_pull_data": {"queue": "market_sync"},
+    "market.tasks.task_refresh_all": {"queue": "market_sync"},
     "snapshot.tasks.task_capture_m15_snapshots": {"queue": "snapshot_capture"},
     "snapshot.tasks.task_aggregate_h4_snapshots": {"queue": "snapshot_aggregate"},
     "snapshot.tasks.task_aggregate_d1_snapshots": {"queue": "snapshot_aggregate"},

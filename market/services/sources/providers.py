@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from django.conf import settings
-from market.services.market_utils import (
+from market.services.pricing.utils import (
     MARKET_CN,
     MARKET_CRYPTO,
     MARKET_FX,

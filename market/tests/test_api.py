@@ -10,9 +10,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from market.models import Instrument, UserInstrumentSubscription
-from market.services.quote_cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
-from market.services.data.index_snapshot import pull_indices
-from market.services.quote_cache import orphan_quote_cache_key
+from market.services.pricing.cache import USD_EXCHANGE_RATES_KEY, WATCHLIST_QUOTES_KEY
+from market.services.refresh.index import refresh_indices
 
 
 @override_settings(
@@ -40,7 +39,7 @@ class MarketBasicApiTests(APITestCase):
             is_active=True,
         )
 
-    @patch("market.services.quote_cache.pull_single_instrument_quote")
+    @patch("market.services.pricing.cache.pull_single_instrument_quote")
     def test_watchlist_add_and_snapshot_query(self, mock_pull):
         """验证自选 验证添加后可查询快照。"""
         mock_pull.return_value = {
@@ -86,7 +85,33 @@ class MarketBasicApiTests(APITestCase):
         self.assertIn("message", resp.data)
         self.assertIn("指数暂不支持加入自选", resp.data["message"])
 
-    @patch("market.services.quote_cache.pull_single_instrument_quote")
+    @patch("market.services.pricing.cache.pull_single_instrument_quote")
+    def test_watchlist_add_reuses_cached_quote_with_symbol_only(self, mock_pull):
+        """验证自选 add 能复用仅含 symbol 的缓存行情。"""
+        cache.set(
+            WATCHLIST_QUOTES_KEY,
+            {
+                "data": {
+                    "US": [
+                        {
+                            "symbol": "AAPL.US",
+                            "name": "Apple Inc.",
+                            "price": 200.0,
+                        }
+                    ]
+                }
+            },
+            timeout=None,
+        )
+
+        resp = self.client.post(self.watchlist_endpoint, {"symbol": "AAPL.US"}, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(resp.data["quote_ready"])
+        self.assertEqual(resp.data["quote_source"], "redis")
+        mock_pull.assert_not_called()
+
+    @patch("market.services.pricing.cache.pull_single_instrument_quote")
     def test_watchlist_add_accepts_lowercase_symbol(self, mock_pull):
         """验证自选 add 会在输入边界标准化小写代码。"""
         mock_pull.return_value = {
@@ -101,12 +126,13 @@ class MarketBasicApiTests(APITestCase):
         self.assertTrue(UserInstrumentSubscription.objects.filter(user=self.user, instrument=self.instrument).exists())
 
     @patch(
-        "market.views.pull_indices",
+        "market.views.refresh_indices",
         return_value={
             "updated_at": "2026-03-07T09:30:00+08:00",
             "items": [
                 {
-                    "instrument_id": 101,
+                    "market": "US",
+                    "short_code": "SPX",
                     "name": "S&P500",
                     "prev_close": "5100",
                     "day_high": "5150",
@@ -126,11 +152,11 @@ class MarketBasicApiTests(APITestCase):
         self.assertEqual(resp.data["items"][0]["pct"], "0.8")
 
     @patch(
-        "market.services.data.index_snapshot._fetch_rows_yfinance",
+        "market.services.refresh.index._fetch_rows_yfinance",
         return_value=[
             {
                 "symbol": "SPX.US",
-                "instrument_id": 101,
+                "short_code": "SPX",
                 "name": "S&P500",
                 "prev_close": "5100",
                 "day_high": "5150",
@@ -139,7 +165,7 @@ class MarketBasicApiTests(APITestCase):
             },
             {
                 "symbol": "HSI.HK",
-                "instrument_id": 102,
+                "short_code": "HSI",
                 "name": "恒生指数",
                 "prev_close": "17000",
                 "day_high": "17100",
@@ -149,7 +175,7 @@ class MarketBasicApiTests(APITestCase):
         ],
     )
     @patch(
-        "market.services.data.index_snapshot.market_guard_decision",
+        "market.services.refresh.index.market_guard_decision",
         return_value=type("Decision", (), {"should_pull": True})(),
     )
     def test_build_market_indices_snapshot(self, _mock_guard, _mock_fetch_rows):
@@ -171,12 +197,100 @@ class MarketBasicApiTests(APITestCase):
             is_active=True,
         )
 
-        payload = pull_indices()
+        payload = refresh_indices()
 
         self.assertIn("updated_at", payload)
         self.assertEqual(len(payload["items"]), 2)
         self.assertEqual(payload["items"][0]["name"], "S&P500")
+        self.assertEqual(payload["items"][0]["short_code"], "SPX")
         self.assertIsNotNone(payload["items"][0]["prev_close"])
+
+    @patch(
+        "market.services.refresh.index._fetch_rows_yfinance",
+        return_value=[
+            {
+                "symbol": "SPX.US",
+                "short_code": "SPX",
+                "name": "S&P500",
+                "prev_close": "5100",
+                "day_high": "5150",
+                "day_low": "5080",
+                "pct": "0.8",
+            },
+        ],
+    )
+    @patch(
+        "market.services.refresh.index.market_guard_decision",
+        return_value=type("Decision", (), {"should_pull": False})(),
+    )
+    def test_force_full_fetch_builds_indices_snapshot_outside_guard(self, _mock_guard, _mock_fetch_rows):
+        """验证首次强制初始化会绕过指数市场守卫。"""
+        Instrument.objects.create(
+            symbol="SPX.US",
+            short_code="SPX",
+            name="S&P500",
+            market=Instrument.Market.US,
+            asset_class=Instrument.AssetClass.INDEX,
+            is_active=True,
+        )
+
+        payload = refresh_indices(force_full_fetch=True)
+
+        self.assertEqual(len(payload["items"]), 1)
+        self.assertEqual(payload["items"][0]["short_code"], "SPX")
+        self.assertEqual(payload["items"][0]["prev_close"], "5100")
+
+    @patch(
+        "market.services.refresh.index._fetch_rows_yfinance",
+        return_value=[
+            {
+                "symbol": "000001.SH",
+                "short_code": "000001.SH",
+                "name": "上证指数",
+                "prev_close": "3957",
+                "day_high": "3906",
+                "day_low": "3794",
+                "pct": "-3.63",
+            },
+            {
+                "symbol": "399001.SZ",
+                "short_code": "399001.SZ",
+                "name": "深圳成指",
+                "prev_close": "13866",
+                "day_high": "13758",
+                "day_low": "13274",
+                "pct": "-3.75",
+            },
+        ],
+    )
+    @patch(
+        "market.services.refresh.index.market_guard_decision",
+        return_value=type("Decision", (), {"should_pull": True})(),
+    )
+    def test_build_market_indices_snapshot_keeps_cn_short_code_with_suffix(self, _mock_guard, _mock_fetch_rows):
+        """验证 A 股指数按带后缀 short_code 正常写入。"""
+        Instrument.objects.create(
+            symbol="000001.SH",
+            short_code="000001.SH",
+            name="上证指数",
+            market=Instrument.Market.CN,
+            asset_class=Instrument.AssetClass.INDEX,
+            is_active=True,
+        )
+        Instrument.objects.create(
+            symbol="399001.SZ",
+            short_code="399001.SZ",
+            name="深圳成指",
+            market=Instrument.Market.CN,
+            asset_class=Instrument.AssetClass.INDEX,
+            is_active=True,
+        )
+
+        payload = refresh_indices()
+
+        self.assertEqual(len(payload["items"]), 2)
+        self.assertEqual(payload["items"][0]["short_code"], "000001.SH")
+        self.assertEqual(payload["items"][0]["prev_close"], "3957")
 
     def test_latest_quotes_batch_reads_from_redis(self):
         """验证latest quotes 批量 会从 Redis 读取数据。"""
@@ -278,7 +392,7 @@ class MarketComplexApiTests(APITestCase):
         self.assertTrue(sub.from_position)
         self.assertFalse(sub.from_watchlist)
 
-    @patch("market.services.quote_cache.pull_single_instrument_quote")
+    @patch("market.services.pricing.cache.pull_single_instrument_quote")
     def test_watchlist_delete_accepts_market_and_short_code(self, mock_pull):
         """验证自选 删除 支持 市场 和 short code 删除。"""
         mock_pull.return_value = {
@@ -297,34 +411,6 @@ class MarketComplexApiTests(APITestCase):
         self.assertEqual(del_resp.status_code, status.HTTP_200_OK)
         self.assertEqual(del_resp.data["deleted"], 1)
         self.assertFalse(UserInstrumentSubscription.objects.filter(user=self.user, instrument=self.instrument).exists())
-
-    @patch("market.services.quote_cache.pull_single_instrument_quote")
-    def test_delete_to_orphan_then_add_uses_orphan_quote(self, mock_pull):
-        """验证删除 to orphan then 会复用孤儿行情。"""
-        mock_pull.return_value = {
-            "short_code": "AAPL",
-            "name": "Apple Inc.",
-            "price": 200.0,
-        }
-        add_resp = self.client.post(self.watchlist_endpoint, {"symbol": "AAPL.US"}, format="json")
-        self.assertEqual(add_resp.status_code, status.HTTP_201_CREATED)
-
-        del_resp = self.client.delete(
-            self.watchlist_endpoint,
-            {"market": "us", "short_code": "aapl"},
-            format="json",
-        )
-        self.assertEqual(del_resp.status_code, status.HTTP_200_OK)
-        self.assertFalse(UserInstrumentSubscription.objects.filter(user=self.user, instrument=self.instrument).exists())
-
-        orphan_key = orphan_quote_cache_key("US", "AAPL")
-        self.assertIsNotNone(cache.get(orphan_key))
-
-        mock_pull.reset_mock()
-        readd_resp = self.client.post(self.watchlist_endpoint, {"symbol": "AAPL.US"}, format="json")
-        self.assertEqual(readd_resp.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(readd_resp.data["quote_source"], "redis_orphan")
-        mock_pull.assert_not_called()
 
     def test_fx_rates_base_conversion(self):
         """验证fx rates 按基础币种完成转换。"""

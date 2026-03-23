@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from django.test import SimpleTestCase, override_settings
 
-from market.services.market_schedule import market_guard_decision, resolve_due_markets
+from market.services.pricing.schedule import market_guard_decision, resolve_due_markets
 
 
 @override_settings(

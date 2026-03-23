@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from market.models import Instrument
-from market.services.data.core_index_definitions import index_definitions_for_markets
+from market.services.sources.index_definitions import index_definitions_for_markets
 
 
 class Command(BaseCommand):

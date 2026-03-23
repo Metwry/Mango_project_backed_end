@@ -5,8 +5,8 @@ import re
 from dataclasses import asdict
 from typing import Dict, List, Optional, Tuple
 
-from .market_data_gateway import fetch_market_quotes, pull_single_market_quote
-from .quote_providers import (
+from .gateway import fetch_market_quotes, pull_single_market_quote
+from .providers import (
     MARKET_FX,
     _safe_float,
 )
@@ -130,7 +130,7 @@ def pull_watchlist_quotes(
 
     allowed = None
     if allowed_markets is not None:
-        allowed = {str(m).strip().upper() for m in allowed_markets if str(m).strip()}
+        allowed = set(allowed_markets)
 
     out: Dict[str, List[dict]] = {}
     for market, items in by_market.items():

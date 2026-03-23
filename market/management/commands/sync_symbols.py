@@ -18,8 +18,8 @@ from django.utils import timezone
 
 from common.normalize import normalize_cn_code, normalize_us_code
 from market.models import Instrument
-from market.services.instrument_logo import build_logo_metadata
-from market.services.data.core_index_definitions import index_definitions_for_markets
+from market.services.instruments.logo import build_logo_metadata
+from market.services.sources.index_definitions import index_definitions_for_markets
 
 
 DEFAULT_HEADERS = {

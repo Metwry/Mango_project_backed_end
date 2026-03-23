@@ -1,19 +1,17 @@
 from decimal import Decimal
 
-from django.core.cache import cache
-
 from common.normalize import normalize_code, normalize_usd_rates
 from common.utils import quantize_decimal
 
-from .data.usd_base_rates import pull_usd_base_rate
-from .quote_cache import USD_EXCHANGE_RATES_KEY
+from .cache import get_usd_rate_payload
+from ..refresh.usd_rates import refresh_usd_rates
 
 ACCOUNT_PRECISION = Decimal("0.01")
 
 
 # 从缓存读取并标准化美元基准汇率表。
 def load_cached_usd_rates() -> dict[str, Decimal]:
-    payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}
+    payload = get_usd_rate_payload()
     raw_rates = payload.get("rates") if isinstance(payload, dict) else {}
     return normalize_usd_rates(raw_rates)
 
@@ -44,13 +42,13 @@ def _normalize_rates(raw_rates: object) -> dict[str, float]:
 def get_fx_rates(requested_base: str) -> dict:
     base = str(requested_base or "USD").strip().upper()
 
-    payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}
+    payload = get_usd_rate_payload()
     rates = _normalize_rates(payload.get("rates") if isinstance(payload, dict) else None)
     updated_at = payload.get("updated_at") if isinstance(payload, dict) else None
 
     if len(rates) <= 1:
-        pull_usd_base_rate()
-        payload = cache.get(USD_EXCHANGE_RATES_KEY) or {}
+        refresh_usd_rates()
+        payload = get_usd_rate_payload()
         rates = _normalize_rates(payload.get("rates") if isinstance(payload, dict) else None)
         updated_at = payload.get("updated_at") if isinstance(payload, dict) else None
 
