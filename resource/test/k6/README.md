@@ -22,7 +22,7 @@ Suggested local startup:
 
 - PowerShell: `powershell -ExecutionPolicy Bypass -File resource/scripts/windows/start_celery.ps1 -WithBeat`
 - Bash: `./resource/scripts/unix/start_celery.sh --with-beat`
-- Web: `./resource/scripts/macos/start_web.sh` or `python manage.py runserver 0.0.0.0:8000`
+- Web: `python manage.py runserver 0.0.0.0:8000`
 
 ## Required environment variables
 

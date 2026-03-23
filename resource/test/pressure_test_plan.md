@@ -46,7 +46,7 @@
 
 - Windows PowerShell：`powershell -ExecutionPolicy Bypass -File resource/scripts/windows/start_celery.ps1 -WithBeat`
 - Linux/macOS：`./resource/scripts/unix/start_celery.sh --with-beat`
-- Web 进程：`./resource/scripts/macos/start_web.sh` 或 `python manage.py runserver 0.0.0.0:8000`
+- Web 进程：`python manage.py runserver 0.0.0.0:8000`
 
 ## 3. 优先级排序
 
