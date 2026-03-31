@@ -2,7 +2,7 @@ param(
     [string]$ProjectRoot = "",
     [string]$EnvName = "Back_end_project",
     [string[]]$Targets = @("all"),
-    [switch]$WithBeat,
+    [switch]$WithBeat = $true,
     [string]$Pool = "threads",
     [int]$Concurrency = 4,
     [string]$LogDir = "resource/tmp_celery_logs",
@@ -37,10 +37,7 @@ function Normalize-Targets([string[]]$rawTargets) {
         $v = $t.Trim().ToLowerInvariant()
         switch ($v) {
             "all" {
-                [void]$out.Add("market_sync")
-                [void]$out.Add("snapshot_capture")
-                [void]$out.Add("snapshot_aggregate")
-                [void]$out.Add("snapshot_cleanup")
+                [void]$out.Add("all")
                 continue
             }
             "market" { [void]$out.Add("market_sync"); continue }
@@ -124,6 +121,7 @@ $targetWorkers = Normalize-Targets $Targets
 $pythonPath = Resolve-CondaPython $EnvName
 
 $commands = @{
+    "all" = @("-A", "mango_project", "worker", "-n", "mango_backend@%h", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
     "market_sync" = @("-A", "mango_project", "worker", "-n", "market_sync@%h", "-Q", "market_sync", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
     "snapshot_capture" = @("-A", "mango_project", "worker", "-n", "snapshot_capture@%h", "-Q", "snapshot_capture", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
     "snapshot_aggregate" = @("-A", "mango_project", "worker", "-n", "snapshot_aggregate@%h", "-Q", "snapshot_aggregate", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")

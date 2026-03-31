@@ -79,10 +79,7 @@ normalize_targets() {
     [[ -z "$lowered" ]] && continue
     case "$lowered" in
       all)
-        echo "market_sync"
-        echo "snapshot_capture"
-        echo "snapshot_aggregate"
-        echo "snapshot_cleanup"
+        echo "all"
         ;;
       market|market_sync)
         echo "market_sync"
@@ -125,6 +122,7 @@ if [[ ! -x "${PYTHON_BIN}" ]]; then
 fi
 
 declare -A COMMANDS=(
+  ["all"]="-A mango_project worker -n mango_backend@%h -l info -P ${POOL} --concurrency ${CONCURRENCY}"
   ["market_sync"]="-A mango_project worker -n market_sync@%h -Q market_sync -l info -P ${POOL} --concurrency ${CONCURRENCY}"
   ["snapshot_capture"]="-A mango_project worker -n snapshot_capture@%h -Q snapshot_capture -l info -P ${POOL} --concurrency ${CONCURRENCY}"
   ["snapshot_aggregate"]="-A mango_project worker -n snapshot_aggregate@%h -Q snapshot_aggregate -l info -P ${POOL} --concurrency ${CONCURRENCY}"

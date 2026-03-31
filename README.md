@@ -19,6 +19,7 @@ Mango Backend 是 Mango Finance 的后端服务，基于 Django + Django REST Fr
 - Simple JWT
 - PostgreSQL
 - Redis
+- RabbitMQ
 - Celery
 - yfinance / akshare / exchange-calendars
 
@@ -53,10 +54,15 @@ Mango Backend 是 Mango Finance 的后端服务，基于 Django + Django REST Fr
 
 - Python 3.12
 - PostgreSQL 作为主数据库
-- Redis 作为缓存和 Celery Broker
+- Redis 作为缓存
+- RabbitMQ 作为 Celery Broker
 - 可用 SMTP 服务用于发送邮箱验证码
 
 环境变量模板见 [`.env.example`](.env.example)。
+
+如果你想用仓库内置的 Docker 基础设施编排文件启动 PostgreSQL / Redis / RabbitMQ，
+优先使用根目录的 [`docker-compose.yml`](docker-compose.yml)。
+部署模板明细仍保留在 [`resource/deploy/docker-compose.infrastructure.yml`](resource/deploy/docker-compose.infrastructure.yml)。
 
 ### 6. 本地启动
 
@@ -71,11 +77,24 @@ python manage.py runserver
 后台任务建议单独启动：
 
 ```bash
-celery -A mango_project worker -Q market_sync,snapshot_capture,snapshot_aggregate,snapshot_cleanup -l info
+celery -A mango_project worker -l info
 celery -A mango_project beat -l info
 ```
 
+说明：
+
+- `worker` 默认会监听项目中已配置的全部业务队列
+- `beat` 启动后会额外投递一次 `market_sync` 全量初始化任务，后续定时任务继续按原有市场时段和拉取节奏执行
+- 如果需要按队列拆分 worker，可单独指定 `-Q market_sync`、`-Q snapshot_capture`、`-Q snapshot_aggregate`、`-Q snapshot_cleanup`
+
 也可以直接使用 [resource/scripts/README.md](resource/scripts/README.md) 中的脚本。
+
+如果你只想把基础设施容器拉起来，再继续按 Conda 方式启动 Django / Celery，可执行：
+
+```bash
+cp docker-compose.env.example .env.compose
+docker compose --env-file .env.compose up -d
+```
 
 ### 7. 定时任务
 
@@ -115,6 +134,7 @@ Mango Backend is the API service behind Mango Finance. It is built with Django a
 - Simple JWT
 - PostgreSQL
 - Redis
+- RabbitMQ
 - Celery
 - yfinance / akshare / exchange-calendars
 
@@ -128,7 +148,7 @@ Mango Backend is the API service behind Mango Finance. It is built with Django a
 | [investment/README.md](investment/README.md) | Buy/sell execution, positions, trade history |
 | [snapshot/README.md](snapshot/README.md) | Timed snapshots, aggregation, query APIs |
 | [common/README.md](common/README.md) | Common exceptions, constraints, utilities |
-| [mango_project/README.md](mango_project/README.md) | Django project wiring, settings, Celery bootstrap |
+| [mango_project/README.md](mango_project/README.md) | Django project wiring, settings, and Celery runtime policies |
 | [resource/data/README.md](resource/data/README.md) | Static market calendar data |
 | [resource/scripts/README.md](resource/scripts/README.md) | Local bootstrap and start/stop scripts |
 | [resource/deploy/README.md](resource/deploy/README.md) | Deployment descriptors for launchd |
@@ -137,7 +157,8 @@ Mango Backend is the API service behind Mango Finance. It is built with Django a
 
 - Python 3.12
 - PostgreSQL
-- Redis
+- Redis for caching
+- RabbitMQ as the Celery broker
 - SMTP provider for email verification
 - Celery worker and Celery beat
 
@@ -148,6 +169,15 @@ Mango Backend is the API service behind Mango Finance. It is built with Django a
 3. Run `python manage.py migrate`.
 4. Start Django and Celery processes.
 5. Run `python manage.py test`.
+
+Recommended Celery commands:
+
+```bash
+celery -A mango_project worker -l info
+celery -A mango_project beat -l info
+```
+
+`beat` publishes one forced `market_sync` refresh on startup, while later scheduled refreshes still follow the normal market guard logic.
 
 For deployment and maintenance details, see [MAINTENANCE.md](docs/MAINTENANCE.md).
 
