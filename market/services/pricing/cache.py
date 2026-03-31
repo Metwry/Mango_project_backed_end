@@ -13,7 +13,6 @@ WATCHLIST_QUOTES_KEY = "markets:instrument:instrument_all"
 WATCHLIST_QUOTES_MARKET_KEY_PREFIX = "markets:instrument:"
 USD_EXCHANGE_RATES_KEY = "markets:usd-base-rates"
 MARKET_INDEX_QUOTES_KEY = "markets:indices"
-CELERY_STARTUP_PULL_LOCK_KEY = "runtime:celery:startup-pull-lock"
 
 UTC8 = ZoneInfo("Asia/Shanghai")
 FX_REFRESH_INTERVAL = timedelta(hours=4)

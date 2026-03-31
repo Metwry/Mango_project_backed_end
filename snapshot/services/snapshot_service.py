@@ -5,7 +5,7 @@ from datetime import timedelta, timezone as dt_timezone
 from decimal import Decimal
 from typing import Any
 
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 from accounts.models import Accounts, is_system_investment_account
@@ -128,38 +128,42 @@ def capture_snapshots(*, level: str = SnapshotLevel.M15, snapshot_time=None) -> 
     payload = get_market_data_payload()
     quote_index = build_quote_index(payload)
 
-    active_accounts = list(
-        Accounts.objects.filter(status=Accounts.Status.ACTIVE).only("id", "user_id", "type", "currency", "balance")
-    )
-    investment_accounts_by_user = {
-        account.user_id: account
-        for account in active_accounts
-        if is_system_investment_account(account=account)
-    }
-
-    positions = list(
-        Position.objects
-        .filter(quantity__gt=0)
-        .select_related("instrument")
-        .only(
-            "id",
-            "user_id",
-            "instrument_id",
-            "quantity",
-            "avg_cost",
-            "realized_pnl_total",
-            "instrument__market",
-            "instrument__short_code",
-            "instrument__symbol",
-            "instrument__base_currency",
-        )
-    )
-
     investment_aggregates: dict[int, _InvestmentAggregate] = {}
     position_written = 0
     account_written = 0
 
     with transaction.atomic():
+        # Keep account/position reads on one stable MVCC snapshot to avoid mixed-state captures.
+        with connection.cursor() as cursor:
+            cursor.execute("SET LOCAL TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+
+        active_accounts = list(
+            Accounts.objects.filter(status=Accounts.Status.ACTIVE).only("id", "user_id", "type", "currency", "balance")
+        )
+        investment_accounts_by_user = {
+            account.user_id: account
+            for account in active_accounts
+            if is_system_investment_account(account=account)
+        }
+
+        positions = list(
+            Position.objects
+            .filter(quantity__gt=0)
+            .select_related("instrument")
+            .only(
+                "id",
+                "user_id",
+                "instrument_id",
+                "quantity",
+                "avg_cost",
+                "realized_pnl_total",
+                "instrument__market",
+                "instrument__short_code",
+                "instrument__symbol",
+                "instrument__base_currency",
+            )
+        )
+
         for position in positions:
             investment_account = investment_accounts_by_user.get(position.user_id)
             if investment_account is None:

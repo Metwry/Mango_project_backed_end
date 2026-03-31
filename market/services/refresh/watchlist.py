@@ -157,7 +157,7 @@ def _build_plan(context: _PullContext) -> _PullPlan:
     return _PullPlan(due_markets=due_markets, guard_decisions=guard_decisions)
 
 
-# Celery 首次启动时强制拉取所有已订阅市场，避免仅因时段守卫而写入空占位。
+# force_full_fetch 时强制拉取所有已订阅市场，避免仅因时段守卫而写入空占位。
 def _build_force_bootstrap_plan(context: _PullContext) -> _PullPlan:
     due_markets = set(context.subscription_codes.keys())
     decisions = {

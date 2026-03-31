@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from celery.schedules import crontab
+from kombu import Queue
 
 try:
     import django_redis  # noqa: F401
@@ -100,6 +101,8 @@ INSTALLED_APPS = [
     'market',
     'investment',
     'snapshot',
+    'news',
+    'ai',
 
 ]
 
@@ -198,27 +201,39 @@ CELERY_BEAT_MAX_LOOP_INTERVAL = int(os.getenv("CELERY_BEAT_MAX_LOOP_INTERVAL", "
 
 # Celery 配置
 
-# Broker配置，使用Redis作为消息中间件
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
+# Broker配置，使用RabbitMQ作为消息中间件
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "pyamqp://guest:guest@127.0.0.1:5672//")
 CELERY_TIMEZONE = "Asia/Shanghai"
 CELERY_ENABLE_UTC = True
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_TASK_CREATE_MISSING_QUEUES = True
+CELERY_TASK_QUEUES = (
+    Queue("market_sync", queue_arguments={"x-message-ttl": 240000}),
+    Queue("snapshot_capture", queue_arguments={"x-message-ttl": 720000}),
+    Queue("snapshot_aggregate"),
+    Queue("snapshot_cleanup"),
+)
 
 CELERY_BEAT_SCHEDULE = {
     "pull-watchlist-quotes-every-5-minutes": {
         "task": "market.tasks.task_refresh_all",
-        "schedule": crontab(minute="*/5"),
+        "schedule": crontab(minute="*/10"),
+        "options": {"expires": 240},
     },
     "capture-snapshot-m15": {
         "task": "snapshot.tasks.task_capture_m15_snapshots",
         "schedule": crontab(minute="*/15"),
+        "options": {"expires": 12 * 60},
     },
     "aggregate-snapshot-h4": {
         "task": "snapshot.tasks.task_aggregate_h4_snapshots",
         "schedule": crontab(minute=SNAPSHOT_AGG_H4_CRON_MINUTE, hour="*/4"),
+        "options": {"expires": 90 * 60},
     },
     "aggregate-snapshot-d1": {
         "task": "snapshot.tasks.task_aggregate_d1_snapshots",
         "schedule": crontab(minute=SNAPSHOT_AGG_D1_CRON_MINUTE, hour=SNAPSHOT_AGG_D1_CRON_HOUR),
+        "options": {"expires": 6 * 60 * 60},
     },
     "aggregate-snapshot-mon1": {
         "task": "snapshot.tasks.task_aggregate_mon1_snapshots",
@@ -227,10 +242,12 @@ CELERY_BEAT_SCHEDULE = {
             hour=SNAPSHOT_AGG_MON1_CRON_HOUR,
             day_of_month=SNAPSHOT_AGG_MON1_CRON_DAY,
         ),
+        "options": {"expires": 2 * 24 * 60 * 60},
     },
     "cleanup-snapshot-history-daily": {
         "task": "snapshot.tasks.task_cleanup_snapshot_history",
         "schedule": crontab(hour=SNAPSHOT_CLEANUP_CRON_HOUR, minute=SNAPSHOT_CLEANUP_CRON_MINUTE),
+        "options": {"expires": 24 * 60 * 60},
     },
 }
 
