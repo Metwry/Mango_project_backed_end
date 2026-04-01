@@ -10,6 +10,7 @@ celery==5.6.2
 django-redis==6.0.0
 
 psycopg2-binary==2.9.11
+pgvector==0.4.2
 
 requests==2.32.5
 aiohttp==3.12.15
@@ -18,9 +19,16 @@ lxml==6.0.0
 pandas==3.0.1
 yfinance==1.2.0
 Pillow==11.1.0
+dashscope==1.24.4
 
 akshare==1.18.27
 exchange-calendars==4.13.1
 
 python-dotenv==1.2.2
 gunicorn==23.0.0; platform_system != "Windows"
+PyYAML==6.0.2
+openai==2.30.0
+langchain-core==1.2.23
+langchain-community==0.4.1
+langchain-openai==1.1.12
+langgraph==1.1.4

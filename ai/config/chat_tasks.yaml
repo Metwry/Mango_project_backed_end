@@ -1,0 +1,30 @@
+defaults:
+  provider: aliyun
+  temperature: 0
+  timeout: 60
+  max_retries: 2
+  expects_json: true
+
+providers:
+  aliyun:
+    api_key_env: ALI_API_KEY
+  openai:
+    api_key_env: OPENAI_API_KEY
+  ollama:
+    base_url_env: OLLAMA_BASE_URL
+
+tasks:
+  news_query_understanding:
+    prompt_file: news_query_understanding.txt
+    provider: openai
+    model: gpt-5.4-mini
+    reasoning_effort: none
+    verbosity: low
+  news_answer:
+    prompt_file: news_answer.txt
+    provider: openai
+    model: gpt-5.4-mini
+    reasoning_effort: none
+    verbosity: low
+    max_tokens: 900
+    expects_json: none

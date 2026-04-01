@@ -30,6 +30,8 @@ else:
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 RESOURCE_DIR = BASE_DIR / "resource"
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
 
 
 def _load_dotenv_file(path: Path) -> None:
@@ -195,6 +197,7 @@ SNAPSHOT_AGG_MON1_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_MON1_CRON_MINUTE", "
 
 SNAPSHOT_CLEANUP_CRON_HOUR = int(os.getenv("SNAPSHOT_CLEANUP_CRON_HOUR", "1"))
 SNAPSHOT_CLEANUP_CRON_MINUTE = int(os.getenv("SNAPSHOT_CLEANUP_CRON_MINUTE", "45"))
+AI_NEWS_ANALYSIS_INTERVAL_MINUTES = int(os.getenv("AI_NEWS_ANALYSIS_INTERVAL_MINUTES", "15"))
 
 CELERY_BEAT_MAX_LOOP_INTERVAL = int(os.getenv("CELERY_BEAT_MAX_LOOP_INTERVAL", "5"))
 
@@ -212,6 +215,7 @@ CELERY_TASK_QUEUES = (
     Queue("snapshot_capture", queue_arguments={"x-message-ttl": 720000}),
     Queue("snapshot_aggregate"),
     Queue("snapshot_cleanup"),
+    Queue("ai_analysis"),
 )
 
 CELERY_BEAT_SCHEDULE = {
@@ -249,6 +253,11 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=SNAPSHOT_CLEANUP_CRON_HOUR, minute=SNAPSHOT_CLEANUP_CRON_MINUTE),
         "options": {"expires": 24 * 60 * 60},
     },
+    "analyze-pending-news-every-n-minutes": {
+        "task": "ai.tasks.task_analyze_pending_news_articles",
+        "schedule": crontab(minute=f"*/{AI_NEWS_ANALYSIS_INTERVAL_MINUTES}"),
+        "options": {"expires": max(AI_NEWS_ANALYSIS_INTERVAL_MINUTES * 60 - 5, 30)},
+    },
 }
 
 CELERY_TASK_ROUTES = {
@@ -258,6 +267,7 @@ CELERY_TASK_ROUTES = {
     "snapshot.tasks.task_aggregate_d1_snapshots": {"queue": "snapshot_aggregate"},
     "snapshot.tasks.task_aggregate_mon1_snapshots": {"queue": "snapshot_aggregate"},
     "snapshot.tasks.task_cleanup_snapshot_history": {"queue": "snapshot_cleanup"},
+    "ai.tasks.task_analyze_pending_news_articles": {"queue": "ai_analysis"},
 }
 
 
@@ -373,6 +383,14 @@ LOGGING = {
             "class": "logging.StreamHandler",
             "formatter": "standard",
         },
+        "ai_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "standard",
+            "filename": str(LOG_DIR / "ai.log"),
+            "maxBytes": 5 * 1024 * 1024,
+            "backupCount": 5,
+            "encoding": "utf-8",
+        },
     },
     "loggers": {
         "django": {
@@ -397,6 +415,11 @@ LOGGING = {
         },
         "celery.app.trace": {
             "handlers": default_handlers,
+            "level": "INFO",
+            "propagate": False,
+        },
+        "ai_log": {
+            "handlers": ["ai_file"],
             "level": "INFO",
             "propagate": False,
         },
