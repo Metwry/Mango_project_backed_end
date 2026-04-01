@@ -4,6 +4,12 @@ import re
 
 
 NOISE_PATTERNS = [
+    re.compile(
+        r"^some offers on this page are from advertisers.*see our advertiser disclosure\s*\.?$",
+        re.I,
+    ),
+    re.compile(r"^see our advertiser disclosure\s*\.?$", re.I),
+    re.compile(r"^\[caption\].*$", re.I),
     re.compile(r"^read more here\.?$", re.I),
     re.compile(r"^read the full report here\.?$", re.I),
     re.compile(r"^read more about .*?$", re.I),
@@ -12,6 +18,8 @@ NOISE_PATTERNS = [
     re.compile(r"^see more here\.?$", re.I),
     re.compile(r"^click here\.?$", re.I),
     re.compile(r"^click here for .*?$", re.I),
+    re.compile(r"^read next:.*$", re.I),
+    re.compile(r"^disclosure:\s*none\.?(?:\s*follow .*?)?$", re.I),
 ]
 
 TAIL_CUTOFF_PATTERNS = [
@@ -21,6 +29,9 @@ TAIL_CUTOFF_PATTERNS = [
     "for general informational purposes only",
     "we give no representation, warranty or guarantee",
     "you must obtain professional or specialist advice",
+    "see our free report on the best short-term ai stock",
+    "read next:",
+    "follow insider monkey on google news",
 ]
 
 

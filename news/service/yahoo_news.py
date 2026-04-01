@@ -29,6 +29,8 @@ DEFAULT_HEADERS = {
 DEFAULT_TIMEOUT = aiohttp.ClientTimeout(total=20)
 DEFAULT_LIMIT = 50
 DEFAULT_CONCURRENCY = 10
+DEFAULT_FETCH_RETRY_ATTEMPTS = 3
+DEFAULT_FETCH_RETRY_BASE_DELAY = 1.0
 SUPPORTED_HOSTS = {"finance.yahoo.com"}
 SKIP_TAGS = {
     "button",
@@ -440,10 +442,30 @@ def extract_article_text(page_html: str, article_title: str | None = None) -> st
 async def fetch_text(
     session: aiohttp.ClientSession,
     url: str,
+    *,
+    retry_attempts: int = DEFAULT_FETCH_RETRY_ATTEMPTS,
+    retry_base_delay: float = DEFAULT_FETCH_RETRY_BASE_DELAY,
 ) -> str:
-    async with session.get(url, timeout=DEFAULT_TIMEOUT) as response:
-        response.raise_for_status()
-        return await response.text()
+    last_exc: Exception | None = None
+    for attempt in range(1, retry_attempts + 1):
+        try:
+            async with session.get(url, timeout=DEFAULT_TIMEOUT) as response:
+                response.raise_for_status()
+                return await response.text()
+        except (
+            aiohttp.ClientPayloadError,
+            aiohttp.ClientConnectionError,
+            aiohttp.ClientResponseError,
+            asyncio.TimeoutError,
+            ConnectionResetError,
+        ) as exc:
+            last_exc = exc
+            if attempt >= retry_attempts:
+                break
+            await asyncio.sleep(retry_base_delay * (2 ** (attempt - 1)))
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"fetch_text failed without exception: {url}")
 
 
 async def fetch_article_content(
