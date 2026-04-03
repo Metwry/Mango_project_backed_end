@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from django.utils import timezone
 
-from ai.services import AnalysisService
+from ai.services.content_analysis import AnalysisService
 
 
 @dataclass(slots=True)

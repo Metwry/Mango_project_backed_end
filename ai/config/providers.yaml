@@ -1,0 +1,30 @@
+providers:
+  openai:
+    api_key_env: OPENAI_API_KEY
+    chat_models:
+      gpt-5.4-mini:
+        temperature: 0
+        timeout: 60
+        max_retries: 2
+        max_tokens: 900
+      gpt-5.4:
+        temperature: 0
+        timeout: 60
+        max_retries: 2
+        max_tokens: 1200
+    embedding_models:
+      text-embedding-3-small:
+        batch_size: 10
+  aliyun:
+    api_key_env: ALI_API_KEY
+    chat_models:
+      qwen-plus:
+        temperature: 0
+        timeout: 60
+        max_retries: 2
+        enable_thinking: false
+        thinking_budget: 0
+        max_tokens: 1200
+    embedding_models:
+      text-embedding-v4:
+        batch_size: 10

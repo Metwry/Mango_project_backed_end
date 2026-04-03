@@ -22,6 +22,12 @@ class AIAnalysis(models.Model):
 
     class Meta:
         ordering = ["-analyzed_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_type", "source_id"],
+                name="uniq_ai_analysis_source",
+            ),
+        ]
         indexes = [
             models.Index(fields=["source_type", "source_id"]),
             models.Index(fields=["topic", "analyzed_at"]),

@@ -198,6 +198,7 @@ SNAPSHOT_AGG_MON1_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_MON1_CRON_MINUTE", "
 SNAPSHOT_CLEANUP_CRON_HOUR = int(os.getenv("SNAPSHOT_CLEANUP_CRON_HOUR", "1"))
 SNAPSHOT_CLEANUP_CRON_MINUTE = int(os.getenv("SNAPSHOT_CLEANUP_CRON_MINUTE", "45"))
 AI_NEWS_ANALYSIS_INTERVAL_MINUTES = int(os.getenv("AI_NEWS_ANALYSIS_INTERVAL_MINUTES", "15"))
+AI_NEWS_EMBEDDING_INTERVAL_MINUTES = int(os.getenv("AI_NEWS_EMBEDDING_INTERVAL_MINUTES", "15"))
 
 CELERY_BEAT_MAX_LOOP_INTERVAL = int(os.getenv("CELERY_BEAT_MAX_LOOP_INTERVAL", "5"))
 
@@ -209,12 +210,16 @@ CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "pyamqp://guest:guest@127.0.0
 CELERY_TIMEZONE = "Asia/Shanghai"
 CELERY_ENABLE_UTC = True
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_TASK_CREATE_MISSING_QUEUES = True
 CELERY_TASK_QUEUES = (
     Queue("market_sync", queue_arguments={"x-message-ttl": 240000}),
     Queue("snapshot_capture", queue_arguments={"x-message-ttl": 720000}),
     Queue("snapshot_aggregate"),
     Queue("snapshot_cleanup"),
+    Queue("news_ingest"),
+    Queue("news_embedding"),
     Queue("ai_analysis"),
 )
 
@@ -258,6 +263,16 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute=f"*/{AI_NEWS_ANALYSIS_INTERVAL_MINUTES}"),
         "options": {"expires": max(AI_NEWS_ANALYSIS_INTERVAL_MINUTES * 60 - 5, 30)},
     },
+    "embed-missing-news-every-n-minutes": {
+        "task": "news.tasks.task_embed_missing_news_articles",
+        "schedule": crontab(minute=f"*/{AI_NEWS_EMBEDDING_INTERVAL_MINUTES}"),
+        "options": {"expires": max(AI_NEWS_EMBEDDING_INTERVAL_MINUTES * 60 - 5, 30)},
+    },
+    "analyze-missing-news-every-n-minutes": {
+        "task": "ai.tasks.task_analyze_missing_news_articles",
+        "schedule": crontab(minute=f"*/{AI_NEWS_ANALYSIS_INTERVAL_MINUTES}"),
+        "options": {"expires": max(AI_NEWS_ANALYSIS_INTERVAL_MINUTES * 60 - 5, 30)},
+    },
 }
 
 CELERY_TASK_ROUTES = {
@@ -267,6 +282,11 @@ CELERY_TASK_ROUTES = {
     "snapshot.tasks.task_aggregate_d1_snapshots": {"queue": "snapshot_aggregate"},
     "snapshot.tasks.task_aggregate_mon1_snapshots": {"queue": "snapshot_aggregate"},
     "snapshot.tasks.task_cleanup_snapshot_history": {"queue": "snapshot_cleanup"},
+    "news.tasks.task_ingest_yahoo_news": {"queue": "news_ingest"},
+    "news.tasks.task_embed_news_article": {"queue": "news_embedding"},
+    "news.tasks.task_embed_missing_news_articles": {"queue": "news_embedding"},
+    "ai.tasks.task_analyze_news_article": {"queue": "ai_analysis"},
+    "ai.tasks.task_analyze_missing_news_articles": {"queue": "ai_analysis"},
     "ai.tasks.task_analyze_pending_news_articles": {"queue": "ai_analysis"},
 }
 

@@ -1,7 +1,7 @@
 param(
     [string]$ProjectRoot = "",
     [string]$EnvName = "Back_end_project",
-    [string[]]$Targets = @("all"),
+    [string[]]$Targets = @("default"),
     [switch]$WithBeat = $true,
     [string]$Pool = "threads",
     [int]$Concurrency = 4,
@@ -36,6 +36,10 @@ function Normalize-Targets([string[]]$rawTargets) {
         if ([string]::IsNullOrWhiteSpace($t)) { continue }
         $v = $t.Trim().ToLowerInvariant()
         switch ($v) {
+            "default" {
+                [void]$out.Add("default")
+                continue
+            }
             "all" {
                 [void]$out.Add("all")
                 continue
@@ -51,7 +55,16 @@ function Normalize-Targets([string[]]$rawTargets) {
             "snapshot_capture" { [void]$out.Add("snapshot_capture"); continue }
             "snapshot_aggregate" { [void]$out.Add("snapshot_aggregate"); continue }
             "snapshot_cleanup" { [void]$out.Add("snapshot_cleanup"); continue }
-            default { throw "Unknown target: $t. Allowed: all, market_sync, snapshot_capture, snapshot_aggregate, snapshot_cleanup, market, snapshot" }
+            "news" {
+                [void]$out.Add("news_ingest")
+                [void]$out.Add("news_embedding")
+                [void]$out.Add("ai_analysis")
+                continue
+            }
+            "news_ingest" { [void]$out.Add("news_ingest"); continue }
+            "news_embedding" { [void]$out.Add("news_embedding"); continue }
+            "ai_analysis" { [void]$out.Add("ai_analysis"); continue }
+            default { throw "Unknown target: $t. Allowed: default, all, market_sync, snapshot_capture, snapshot_aggregate, snapshot_cleanup, news_ingest, news_embedding, ai_analysis, market, snapshot, news" }
         }
     }
     return @($out)
@@ -121,14 +134,28 @@ $targetWorkers = Normalize-Targets $Targets
 $pythonPath = Resolve-CondaPython $EnvName
 
 $commands = @{
+    "default" = @(
+        "-A", "mango_project",
+        "worker",
+        "-n", "mango_default@%h",
+        "-Q", "market_sync,snapshot_capture,snapshot_aggregate,snapshot_cleanup,news_ingest,news_embedding,ai_analysis",
+        "-l", "info",
+        "-P", $Pool,
+        "--concurrency", "$Concurrency"
+    )
     "all" = @("-A", "mango_project", "worker", "-n", "mango_backend@%h", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
     "market_sync" = @("-A", "mango_project", "worker", "-n", "market_sync@%h", "-Q", "market_sync", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
     "snapshot_capture" = @("-A", "mango_project", "worker", "-n", "snapshot_capture@%h", "-Q", "snapshot_capture", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
     "snapshot_aggregate" = @("-A", "mango_project", "worker", "-n", "snapshot_aggregate@%h", "-Q", "snapshot_aggregate", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
     "snapshot_cleanup" = @("-A", "mango_project", "worker", "-n", "snapshot_cleanup@%h", "-Q", "snapshot_cleanup", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
+    "news_ingest" = @("-A", "mango_project", "worker", "-n", "news_ingest@%h", "-Q", "news_ingest", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
+    "news_embedding" = @("-A", "mango_project", "worker", "-n", "news_embedding@%h", "-Q", "news_embedding", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
+    "ai_analysis" = @("-A", "mango_project", "worker", "-n", "ai_analysis@%h", "-Q", "ai_analysis", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
 }
 
-$processEnv = @{}
+$processEnv = @{
+    "CELERY_LOG_DIR" = $resolvedLogDir
+}
 
 $records = @()
 if ($WithBeat) {
@@ -195,6 +222,19 @@ if ($FollowLogs) {
         $tail = [Math]::Max(1, $TailLines)
         Write-Host ""
         Write-Host "Following logs (Ctrl + C to stop):"
+        $deadline = (Get-Date).AddSeconds(10)
+        while ((Get-Date) -lt $deadline) {
+            $missing = @($paths | Where-Object { !(Test-Path $_) })
+            if ($missing.Count -eq 0) {
+                break
+            }
+            Start-Sleep -Milliseconds 300
+        }
+        foreach ($path in $paths) {
+            if (!(Test-Path $path)) {
+                New-Item -ItemType File -Path $path | Out-Null
+            }
+        }
         Get-Content -Path $paths -Tail $tail -Wait
     }
 }

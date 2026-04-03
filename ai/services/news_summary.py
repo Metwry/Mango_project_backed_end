@@ -7,7 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from ai.models import AIAnalysis, AIAnalysisCountry, AIAnalysisInstrument, AIAnalysisTag
-from ai.services.analysis import AnalysisResult, AnalysisService
+from ai.services.content_analysis import AnalysisResult, AnalysisService
 from market.models import Instrument
 from news.models import NewsArticle
 
@@ -96,18 +96,24 @@ class NewsAnalysisService:
         payload: NewsAnalysisPayload,
         result: AnalysisResult,
     ) -> AIAnalysis:
-        analysis = AIAnalysis.objects.create(
+        analysis, _ = AIAnalysis.objects.update_or_create(
             source_type=AIAnalysis.SourceType.NEWS_ARTICLE,
             source_id=article.id,
-            topic=payload.topic,
-            summary_short=payload.summary_short,
-            summary_long=payload.summary_long,
-            sentiment=payload.sentiment,
-            impact_level=payload.impact_level,
-            model_name=result.model_name,
-            prompt_name=result.prompt_name,
-            analyzed_at=timezone.now(),
+            defaults={
+                "topic": payload.topic,
+                "summary_short": payload.summary_short,
+                "summary_long": payload.summary_long,
+                "sentiment": payload.sentiment,
+                "impact_level": payload.impact_level,
+                "model_name": result.model_name,
+                "prompt_name": result.prompt_name,
+                "analyzed_at": timezone.now(),
+            },
         )
+
+        AIAnalysisCountry.objects.filter(ai_analysis=analysis).delete()
+        AIAnalysisTag.objects.filter(ai_analysis=analysis).delete()
+        AIAnalysisInstrument.objects.filter(ai_analysis=analysis).delete()
 
         AIAnalysisCountry.objects.bulk_create(
             [
