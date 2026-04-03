@@ -7,26 +7,28 @@ from django.test import SimpleTestCase
 from django.test import TestCase
 from django.utils import timezone
 
+from ai.services.query_rewrite import QueryUnderstandingService
+from ai.agent.rag.newsSummaryService import NewsSummaryQuery, NewsSummaryService
 from ai.models import AIAnalysis, AIAnalysisCountry, AIAnalysisInstrument, AIAnalysisTag
 from market.models import Instrument
 from news.models import NewsArticle, NewsArticleEmbedding
-from news.service.hash_utils import calculate_content_md5, normalize_content_for_hash
-from news.service.news_content_cleanup import NewsContentCleanupService, clean_stored_article_content
-from news.service.news_answer import NewsAnswerService
 from news.service.news_embedding import NewsArticleEmbeddingService
-from news.service.news_ingest_service import YahooNewsIngestService
-from news.service.query_understanding import QueryUnderstandingService
-from news.service.news_search import NewsSearchService
+from news.service.news_put import NewsPutService
 from news.service.yahoo_news import (
     HeadingBlock,
     ListBlock,
     ParagraphBlock,
+    PreparedNewsArticle,
     TableBlock,
-    YahooNewsArticle,
     extract_article_blocks,
     fetch_text,
+    parse_published_at,
+    prepare_article,
     render_blocks_text,
 )
+from news.service.news_search import NewsSearchResult, NewsSearchService
+from news.utils.cleanup import clean_stored_article_content
+from news.utils.hash import calculate_content_md5, normalize_content_for_hash
 
 
 class YahooNewsParsingTests(SimpleTestCase):
@@ -121,66 +123,58 @@ class YahooNewsFetchRetryTests(SimpleTestCase):
                 )
 
 
-class YahooNewsIngestServiceTests(TestCase):
-    def test_ingest_keeps_article_when_analysis_fails(self) -> None:
-        analysis_service = Mock()
-        analysis_service.analyze_article.side_effect = ValueError("prompt error")
-        service = YahooNewsIngestService(news_analysis_service=analysis_service)
-        article = YahooNewsArticle(
-            title="BTC slips",
-            link="https://finance.yahoo.com/news/btc-slips.html",
-            published_at="2026-03-31T15:06:24Z",
-            source="Yahoo Finance",
-            content="Bitcoin edged lower after a broad risk-off move.",
-        )
-
-        with patch(
-            "news.service.news_ingest_service.fetch_yahoo_finance_articles_sync",
-            return_value=[article],
-        ):
-            stats = service.ingest_latest(limit=1)
-
-        self.assertEqual(stats.created, 1)
-        self.assertEqual(stats.failed_analysis, 1)
-        self.assertEqual(NewsArticle.objects.count(), 1)
-
+class YahooNewsPreparationTests(SimpleTestCase):
     def test_parse_published_at_supports_iso8601(self) -> None:
-        parsed = YahooNewsIngestService._parse_published_at("2026-03-31T15:06:24Z")
+        parsed = parse_published_at("2026-03-31T15:06:24Z")
         self.assertEqual(parsed.isoformat(), "2026-03-31T15:06:24+00:00")
 
-    def test_ingest_creates_article_and_runs_analysis(self) -> None:
-        analysis_service = Mock()
-        service = YahooNewsIngestService(news_analysis_service=analysis_service)
-        article = YahooNewsArticle(
-            title="Chip stocks rally",
-            link="https://finance.yahoo.com/news/chip-stocks-rally-1.html",
-            published_at="Tue, 31 Mar 2026 08:00:00 GMT",
-            source="Reuters",
-            content="Nvidia and AMD rose after strong AI demand signals.",
+    def test_prepare_article_cleans_content_and_sets_hash(self) -> None:
+        article = prepare_article(
+            {
+                "title": "Chip stocks rally",
+                "link": "https://finance.yahoo.com/news/chip-stocks-rally-1.html",
+                "published_at": "Tue, 31 Mar 2026 08:00:00 GMT",
+                "source": "Reuters",
+            },
+            content=(
+                "Some offers on this page are from advertisers who pay us. "
+                "See our Advertiser Disclosure .\n\nNvidia and AMD rose after strong AI demand signals."
+            ),
+            blocks=[],
         )
 
-        with patch(
-            "news.service.news_ingest_service.fetch_yahoo_finance_articles_sync",
-            return_value=[article],
-        ):
-            stats = service.ingest_latest(limit=1)
+        self.assertEqual(article.provider, "yahoo")
+        self.assertEqual(article.article_url, "https://finance.yahoo.com/news/chip-stocks-rally-1.html")
+        self.assertNotIn("Advertiser Disclosure", article.content)
+        self.assertEqual(article.content_hash, calculate_content_md5(article.content))
 
-        self.assertEqual(stats.fetched, 1)
+
+class NewsPutServiceTests(TestCase):
+    def test_put_creates_article(self) -> None:
+        service = NewsPutService()
+        article = PreparedNewsArticle(
+            provider="yahoo",
+            source="Reuters",
+            article_url="https://finance.yahoo.com/news/chip-stocks-rally-1.html",
+            title="Chip stocks rally",
+            content="Nvidia and AMD rose after strong AI demand signals.",
+            content_hash=calculate_content_md5("Nvidia and AMD rose after strong AI demand signals."),
+            language="en",
+            published=datetime.fromisoformat("2026-03-31T08:00:00+00:00"),
+            fetched_at=datetime.fromisoformat("2026-03-31T08:30:00+00:00"),
+        )
+
+        stats = service.put_articles([article])
+
+        self.assertEqual(stats.received, 1)
         self.assertEqual(stats.created, 1)
-        self.assertEqual(stats.analyzed, 1)
         self.assertEqual(NewsArticle.objects.count(), 1)
         saved = NewsArticle.objects.get()
-        self.assertEqual(saved.article_url, article.link)
-        self.assertEqual(saved.content_hash, calculate_content_md5(article.content))
-        analysis_service.analyze_article.assert_called_once_with(
-            saved,
-            save=True,
-            config_overrides=None,
-        )
+        self.assertEqual(saved.article_url, article.article_url)
+        self.assertEqual(saved.content_hash, article.content_hash)
 
-    def test_ingest_skips_duplicate_content_from_different_url(self) -> None:
-        analysis_service = Mock()
-        service = YahooNewsIngestService(news_analysis_service=analysis_service)
+    def test_put_skips_duplicate_content_from_different_url(self) -> None:
+        service = NewsPutService()
         content = "Treasury yields were steady as investors awaited inflation data."
         NewsArticle.objects.create(
             provider="yahoo",
@@ -192,28 +186,26 @@ class YahooNewsIngestServiceTests(TestCase):
             language="en",
             published="2026-03-31T08:00:00Z",
         )
-        article = YahooNewsArticle(
-            title="Duplicate",
-            link="https://finance.yahoo.com/news/duplicate-article.html",
-            published_at="Tue, 31 Mar 2026 08:00:00 GMT",
+        article = PreparedNewsArticle(
+            provider="yahoo",
             source="Yahoo Finance",
+            article_url="https://finance.yahoo.com/news/duplicate-article.html",
+            title="Duplicate",
             content=content,
+            content_hash=calculate_content_md5(content),
+            language="en",
+            published=datetime.fromisoformat("2026-03-31T08:00:00+00:00"),
+            fetched_at=datetime.fromisoformat("2026-03-31T08:30:00+00:00"),
         )
 
-        with patch(
-            "news.service.news_ingest_service.fetch_yahoo_finance_articles_sync",
-            return_value=[article],
-        ):
-            stats = service.ingest_latest(limit=1)
+        stats = service.put_articles([article])
 
         self.assertEqual(stats.duplicate_content, 1)
         self.assertEqual(stats.created, 0)
         self.assertEqual(NewsArticle.objects.count(), 1)
-        analysis_service.analyze_article.assert_not_called()
 
-    def test_ingest_existing_article_skips_analysis_when_unchanged(self) -> None:
-        analysis_service = Mock()
-        service = YahooNewsIngestService(news_analysis_service=analysis_service)
+    def test_put_updates_existing_article(self) -> None:
+        service = NewsPutService()
         content = "Oil prices held steady after OPEC comments."
         existing = NewsArticle.objects.create(
             provider="yahoo",
@@ -225,35 +217,24 @@ class YahooNewsIngestServiceTests(TestCase):
             language="en",
             published="2026-03-31T08:00:00Z",
         )
-        AIAnalysis.objects.create(
-            source_type=AIAnalysis.SourceType.NEWS_ARTICLE,
-            source_id=existing.id,
-            topic="Energy",
-            summary_short="短摘要",
-            summary_long="长摘要",
-            sentiment="neutral",
-            impact_level="low",
-            model_name="test-model",
-            prompt_name="test-prompt",
-            analyzed_at="2026-03-31T08:30:00Z",
-        )
-        article = YahooNewsArticle(
-            title="Oil prices",
-            link=existing.article_url,
-            published_at="Tue, 31 Mar 2026 08:00:00 GMT",
+        article = PreparedNewsArticle(
+            provider="yahoo",
             source="Reuters",
-            content=content,
+            article_url=existing.article_url,
+            title="Oil prices updated",
+            content="Oil prices rose after fresh OPEC comments.",
+            content_hash=calculate_content_md5("Oil prices rose after fresh OPEC comments."),
+            language="en",
+            published=datetime.fromisoformat("2026-03-31T08:00:00+00:00"),
+            fetched_at=datetime.fromisoformat("2026-03-31T08:30:00+00:00"),
         )
 
-        with patch(
-            "news.service.news_ingest_service.fetch_yahoo_finance_articles_sync",
-            return_value=[article],
-        ):
-            stats = service.ingest_latest(limit=1)
+        stats = service.put_articles([article])
 
         self.assertEqual(stats.updated, 1)
-        self.assertEqual(stats.skipped_analysis, 1)
-        analysis_service.analyze_article.assert_not_called()
+        existing.refresh_from_db()
+        self.assertEqual(existing.title, "Oil prices updated")
+        self.assertEqual(existing.content_hash, article.content_hash)
 
 
 class NewsArticleEmbeddingServiceTests(TestCase):
@@ -335,43 +316,6 @@ class NewsContentCleanupServiceTests(TestCase):
         cleaned = clean_stored_article_content(content)
 
         self.assertEqual(cleaned, "Precious metals are in high demand.")
-
-    def test_clean_articles_updates_content_hash_and_clears_embeddings(self) -> None:
-        original_content = (
-            "Some offers on this page are from advertisers who pay us, which may affect which "
-            "products we write about, but not our recommendations. See our Advertiser Disclosure .\n\n"
-            "Useful paragraph."
-        )
-        article = NewsArticle.objects.create(
-            provider="yahoo",
-            source="Yahoo Personal Finance",
-            article_url="https://finance.yahoo.com/news/cleanup-test.html",
-            title="Cleanup test",
-            content=original_content,
-            content_hash=calculate_content_md5(original_content),
-            language="en",
-            published="2026-04-01T08:00:00Z",
-        )
-        NewsArticleEmbedding.objects.create(
-            article=article,
-            chunk_index=0,
-            chunk_text="stale",
-            chunk_hash=calculate_content_md5("stale"),
-            title=article.title,
-            source=article.source,
-            published=article.published,
-            embedding_model="text-embedding-3-small",
-            embedding=[0.1] * 1536,
-        )
-
-        stats = NewsContentCleanupService().clean_articles()
-
-        article.refresh_from_db()
-        self.assertEqual(stats.updated, 1)
-        self.assertEqual(stats.cleared_embeddings, 1)
-        self.assertEqual(article.content, "Useful paragraph.")
-        self.assertEqual(article.content_hash, calculate_content_md5("Useful paragraph."))
-        self.assertEqual(NewsArticleEmbedding.objects.filter(article=article).count(), 0)
 
 
 class QueryUnderstandingServiceTests(TestCase):
@@ -455,7 +399,7 @@ class NewsSearchServiceTests(TestCase):
             source=article_b.source,
             published=article_b.published,
             embedding_model="text-embedding-v4",
-            embedding=[0.0, 1.0] + [0.0] * 1534,
+            embedding=[0.8, 0.2] + [0.0] * 1534,
         )
 
         service = NewsSearchService()
@@ -463,26 +407,13 @@ class NewsSearchServiceTests(TestCase):
             service.embedding_service,
             "embed",
             return_value=Mock(model_name="text-embedding-v4", vectors=[[1.0] + [0.0] * 1535]),
-        ), patch.object(
-            service.query_understanding_service,
-            "understand",
-            return_value=Mock(
-                semantic_query="bitcoin weakness",
-                published_from=None,
-                published_to=None,
-            ),
         ):
-            result = service.search(query="bitcoin weakness", top_k=2, max_distance=None)
+            result = service.search(query="bitcoin weakness", top_k=2)
 
         self.assertEqual(result.query, "bitcoin weakness")
-        self.assertEqual(result.semantic_query, "bitcoin weakness")
-        self.assertEqual(len(result.hits), 2)
-        self.assertEqual(result.response_mode, "overview")
-        self.assertEqual(result.hits[0].article_id, article_a.id)
-        self.assertEqual(result.hits[0].article_url, article_a.article_url)
-        self.assertLess(result.hits[0].score, result.hits[1].score)
-        self.assertEqual(len(result.hits[0].matched_chunks), 1)
-        self.assertIsNone(result.hits[0].analysis)
+        self.assertEqual(result.hit_count, 2)
+        self.assertIn(article_a.article_url, result.context)
+        self.assertIn(article_b.article_url, result.context)
 
     def test_search_deduplicates_multiple_hits_from_same_article(self) -> None:
         article = NewsArticle.objects.create(
@@ -536,7 +467,7 @@ class NewsSearchServiceTests(TestCase):
             source=other_article.source,
             published=other_article.published,
             embedding_model="text-embedding-v4",
-            embedding=[0.0, 1.0] + [0.0] * 1534,
+            embedding=[0.8, 0.2] + [0.0] * 1534,
         )
 
         service = NewsSearchService()
@@ -544,27 +475,14 @@ class NewsSearchServiceTests(TestCase):
             service.embedding_service,
             "embed",
             return_value=Mock(model_name="text-embedding-v4", vectors=[[1.0] + [0.0] * 1535]),
-        ), patch.object(
-            service.query_understanding_service,
-            "understand",
-            return_value=Mock(
-                semantic_query="bitcoin decline",
-                published_from=None,
-                published_to=None,
-            ),
         ):
-            result = service.search(query="bitcoin decline", top_k=2, max_distance=None)
+            result = service.search(query="bitcoin decline", top_k=2)
 
-        self.assertEqual(len(result.hits), 2)
-        self.assertEqual(result.hits[0].article_id, article.id)
-        self.assertEqual(result.hits[0].chunk_index, 0)
-        self.assertEqual(len(result.hits[0].matched_chunks), 2)
-        self.assertEqual(result.hits[0].matched_chunks[0].chunk_index, 0)
-        self.assertEqual(result.hits[0].matched_chunks[1].chunk_index, 1)
-        self.assertEqual(result.hits[1].article_id, other_article.id)
-        self.assertIsNone(result.hits[0].analysis)
+        self.assertEqual(result.hit_count, 2)
+        self.assertIn(article.article_url, result.context)
+        self.assertIn(other_article.article_url, result.context)
 
-    def test_search_filters_hits_above_max_distance(self) -> None:
+    def test_search_filters_hits_above_default_max_distance(self) -> None:
         article = NewsArticle.objects.create(
             provider="yahoo",
             source="Reuters",
@@ -584,7 +502,7 @@ class NewsSearchServiceTests(TestCase):
             source=article.source,
             published=article.published,
             embedding_model="text-embedding-v4",
-            embedding=[0.0, 1.0] + [0.0] * 1534,
+            embedding=[-1.0] + [0.0] * 1535,
         )
 
         service = NewsSearchService()
@@ -592,18 +510,11 @@ class NewsSearchServiceTests(TestCase):
             service.embedding_service,
             "embed",
             return_value=Mock(model_name="text-embedding-v4", vectors=[[1.0] + [0.0] * 1535]),
-        ), patch.object(
-            service.query_understanding_service,
-            "understand",
-            return_value=Mock(
-                semantic_query="bitcoin",
-                published_from=None,
-                published_to=None,
-            ),
         ):
-            result = service.search(query="bitcoin", top_k=5, max_distance=0.7)
+            result = service.search(query="bitcoin", top_k=5)
 
-        self.assertEqual(result.hits, [])
+        self.assertEqual(result.hit_count, 0)
+        self.assertEqual(result.context, "")
 
     def test_search_attaches_latest_ai_analysis(self) -> None:
         article = NewsArticle.objects.create(
@@ -668,26 +579,17 @@ class NewsSearchServiceTests(TestCase):
             service.embedding_service,
             "embed",
             return_value=Mock(model_name="text-embedding-v4", vectors=[[1.0] + [0.0] * 1535]),
-        ), patch.object(
-            service.query_understanding_service,
-            "understand",
-            return_value=Mock(
-                semantic_query="bitcoin weakness",
-                published_from=None,
-                published_to=None,
-            ),
         ):
-            result = service.search(query="bitcoin weakness", top_k=1, max_distance=None)
+            result = service.search(query="bitcoin weakness", top_k=1)
 
-        self.assertEqual(len(result.hits), 1)
-        self.assertIsNotNone(result.hits[0].analysis)
-        self.assertEqual(result.hits[0].analysis.topic, "Bitcoin Weakness")
-        self.assertEqual(result.hits[0].analysis.sentiment, "negative")
-        self.assertEqual(result.hits[0].analysis.countries, ["United States"])
-        self.assertEqual(result.hits[0].analysis.tags, ["Crypto"])
-        self.assertEqual(result.hits[0].analysis.instruments, ["BTCUSDT.CRYPTO"])
+        self.assertEqual(result.hit_count, 1)
+        self.assertIn("Bitcoin Weakness", result.context)
+        self.assertIn("negative", result.context)
+        self.assertIn("United States", result.context)
+        self.assertIn("Crypto", result.context)
+        self.assertIn("BTCUSDT.CRYPTO", result.context)
 
-    def test_search_uses_query_plan_for_embedding_and_time_filter(self) -> None:
+    def test_search_uses_explicit_time_filter(self) -> None:
         article_in_range = NewsArticle.objects.create(
             provider="yahoo",
             source="Reuters",
@@ -732,229 +634,149 @@ class NewsSearchServiceTests(TestCase):
         )
 
         service = NewsSearchService()
+        published_from = datetime.fromisoformat("2026-03-25T00:00:00+00:00")
+        published_to = datetime.fromisoformat("2026-04-01T23:59:59+00:00")
         with patch.object(
-            service.query_understanding_service,
-            "understand",
-            return_value=Mock(
-                semantic_query="bitcoin price weakness",
-                published_from=datetime.fromisoformat("2026-03-25T00:00:00+00:00"),
-                published_to=datetime.fromisoformat("2026-04-01T23:59:59+00:00"),
-            ),
-        ), patch.object(
             service.embedding_service,
             "embed",
             return_value=Mock(model_name="text-embedding-v4", vectors=[[1.0] + [0.0] * 1535]),
         ) as embed_mock:
-            result = service.search(query="最近比特币为什么跌", top_k=5, max_distance=None)
-
-        self.assertEqual(result.semantic_query, "bitcoin price weakness")
-        self.assertEqual(len(result.hits), 1)
-        self.assertEqual(result.hits[0].article_id, article_in_range.id)
-        embed_mock.assert_called_once_with(
-            task_name="news_article_embedding",
-            texts=["bitcoin price weakness"],
-            config_overrides=None,
-        )
-
-    def test_search_can_skip_query_understanding(self) -> None:
-        article = NewsArticle.objects.create(
-            provider="yahoo",
-            source="Reuters",
-            article_url="https://finance.yahoo.com/news/skip-query-understanding.html",
-            title="Recent market news",
-            content="Recent market news overview.",
-            content_hash=calculate_content_md5("Recent market news overview."),
-            language="en",
-            published="2026-04-01T12:00:00Z",
-        )
-        NewsArticleEmbedding.objects.create(
-            article=article,
-            chunk_index=0,
-            chunk_text="Recent market news overview.",
-            chunk_hash=calculate_content_md5("Recent market news overview."),
-            title=article.title,
-            source=article.source,
-            published=article.published,
-            embedding_model="text-embedding-v4",
-            embedding=[1.0] + [0.0] * 1535,
-        )
-
-        service = NewsSearchService()
-        with patch.object(
-            service.embedding_service,
-            "embed",
-            return_value=Mock(model_name="text-embedding-v4", vectors=[[1.0] + [0.0] * 1535]),
-        ) as embed_mock, patch.object(
-            service.query_understanding_service,
-            "understand",
-        ) as understand_mock:
             result = service.search(
-                query="最近有什么财经新闻",
-                top_k=1,
-                max_distance=None,
-                skip_query_understanding=True,
+                query="最近比特币为什么跌",
+                top_k=5,
+                published_from=published_from,
+                published_to=published_to,
             )
 
-        understand_mock.assert_not_called()
+        self.assertEqual(result.hit_count, 1)
+        self.assertIn(article_in_range.article_url, result.context)
         embed_mock.assert_called_once_with(
             task_name="news_article_embedding",
-            texts=["最近有什么财经新闻"],
-            config_overrides=None,
+            texts=["最近比特币为什么跌"],
         )
-        self.assertEqual(result.semantic_query, "最近有什么财经新闻")
-        self.assertIsNone(result.published_from)
-        self.assertIsNone(result.published_to)
-        self.assertEqual(result.response_mode, "overview")
-        self.assertEqual(len(result.hits), 1)
 
-
-class NewsAnswerServiceTests(TestCase):
-    def test_answer_returns_fallback_when_no_hits(self) -> None:
-        service = NewsAnswerService()
+class NewsSummaryServiceTests(TestCase):
+    def test_rag_summarize_returns_fallback_when_no_hits(self) -> None:
+        tool = NewsSummaryService()
         with patch.object(
-            service.search_service,
+            tool.search_service,
             "search",
             return_value=Mock(
                 query="今天应该吃什么",
-                semantic_query="今天应该吃什么",
-                published_from=None,
-                published_to=None,
                 response_mode="overview",
-                hits=[],
+                context="",
+                hit_count=0,
             ),
         ):
-            chunks = list(service.answer(query="今天应该吃什么"))
+            result = tool.rag_summarize(
+                NewsSummaryQuery(query="今天应该吃什么", response_mode="overview")
+            )
 
-        self.assertEqual(chunks, ["未检索到足够相关的财经新闻，暂时无法给出可靠回答。"])
+        self.assertEqual(result, "未检索到足够相关的财经新闻，暂时无法给出可靠回答。")
 
-    def test_prepare_answer_uses_search_result_context(self) -> None:
-        service = NewsAnswerService()
-        search_result = Mock(
+    def test_search_result_context_uses_overview_style(self) -> None:
+        tool = NewsSummaryService()
+        hits = [
+            Mock(
+                article_id=10,
+                title="Bitcoin on the brink of its longest losing streak on record",
+                source="Yahoo Finance",
+                published=datetime.fromisoformat("2026-04-01T12:00:00+00:00"),
+                article_url="https://finance.yahoo.com/news/bitcoin-on-the-brink.html",
+                score=0.53,
+                matched_chunks=[
+                    Mock(
+                        chunk_index=0,
+                        score=0.53,
+                        chunk_text="Bitcoin prices fell again as traders reduced exposure.",
+                    )
+                ],
+                analysis=Mock(
+                    topic="Crypto",
+                    summary_short="比特币延续下跌。",
+                    summary_long="比特币价格继续走弱，市场风险偏好下降。",
+                    sentiment="negative",
+                    impact_level="medium",
+                    countries=["United States"],
+                    tags=["Crypto"],
+                    instruments=["BTCUSDT.CRYPTO"],
+                ),
+            )
+        ]
+        search_result = NewsSearchResult(
             query="bitcoin trend",
-            semantic_query="bitcoin price weakness",
-            published_from=None,
-            published_to=None,
             response_mode="overview",
-            hits=[
-                Mock(
-                    article_id=10,
-                    title="Bitcoin on the brink of its longest losing streak on record",
-                    source="Yahoo Finance",
-                    published=datetime.fromisoformat("2026-04-01T12:00:00+00:00"),
-                    article_url="https://finance.yahoo.com/news/bitcoin-on-the-brink.html",
-                    score=0.53,
-                    matched_chunks=[
-                        Mock(
-                            chunk_index=0,
-                            score=0.53,
-                            chunk_text="Bitcoin prices fell again as traders reduced exposure.",
-                        )
-                    ],
-                    analysis=Mock(
-                        topic="Crypto",
-                        summary_short="比特币延续下跌。",
-                        summary_long="比特币价格继续走弱，市场风险偏好下降。",
-                        sentiment="negative",
-                        impact_level="medium",
-                        countries=["United States"],
-                        tags=["Crypto"],
-                        instruments=["BTCUSDT.CRYPTO"],
-                    ),
-                )
-            ],
+            context=tool.search_service._build_context(hits, "overview"),
+            hit_count=1,
         )
-        mock_chat_model = Mock(llm=object())
 
-        with patch.object(service.search_service, "search", return_value=search_result), patch(
-            "news.service.news_answer.LLMModelFactory.create_chat_model",
-            return_value=mock_chat_model,
-        ):
-            prepared = service._prepare_answer(query="最近比特币走势", top_k=5, max_distance=0.7, timezone_name=None, search_config_overrides=None, query_understanding_overrides=None, answer_config_overrides=None)
-
-        context = prepared.context
+        context = search_result.context
         self.assertIn("Bitcoin on the brink", context)
         self.assertIn("比特币延续下跌。", context)
         self.assertIn("reference_url: https://finance.yahoo.com/news/bitcoin-on-the-brink.html", context)
         self.assertNotIn("matched_chunks:", context)
         self.assertNotIn("比特币价格继续走弱，市场风险偏好下降。", context)
-        self.assertNotIn("- sentiment:", context)
-        self.assertIs(prepared.chat_model, mock_chat_model)
+        self.assertNotIn("- sentiment: negative", context)
 
-    def test_prepare_answer_includes_matched_chunks_for_detail_query(self) -> None:
-        service = NewsAnswerService()
-        search_result = Mock(
+    def test_search_result_context_uses_detail_style(self) -> None:
+        tool = NewsSummaryService()
+        hits = [
+            Mock(
+                article_id=10,
+                title="Bitcoin on the brink of its longest losing streak on record",
+                source="Yahoo Finance",
+                published=datetime.fromisoformat("2026-04-01T12:00:00+00:00"),
+                article_url="https://finance.yahoo.com/news/bitcoin-on-the-brink.html",
+                score=0.53,
+                matched_chunks=[
+                    Mock(
+                        chunk_index=0,
+                        score=0.53,
+                        chunk_text="Bitcoin prices fell again as traders reduced exposure.",
+                    )
+                ],
+                analysis=Mock(
+                    topic="Crypto",
+                    summary_short="比特币延续下跌。",
+                    summary_long="比特币价格继续走弱，市场风险偏好下降。",
+                    sentiment="negative",
+                    impact_level="medium",
+                    countries=["United States"],
+                    tags=["Crypto"],
+                    instruments=["BTCUSDT.CRYPTO"],
+                ),
+            )
+        ]
+        search_result = NewsSearchResult(
             query="最近比特币为什么跌",
-            semantic_query="bitcoin price weakness",
-            published_from=None,
-            published_to=None,
             response_mode="detail",
-            hits=[
-                Mock(
-                    article_id=10,
-                    title="Bitcoin on the brink of its longest losing streak on record",
-                    source="Yahoo Finance",
-                    published=datetime.fromisoformat("2026-04-01T12:00:00+00:00"),
-                    article_url="https://finance.yahoo.com/news/bitcoin-on-the-brink.html",
-                    score=0.53,
-                    matched_chunks=[
-                        Mock(
-                            chunk_index=0,
-                            score=0.53,
-                            chunk_text="Bitcoin prices fell again as traders reduced exposure.",
-                        )
-                    ],
-                    analysis=Mock(
-                        topic="Crypto",
-                        summary_short="比特币延续下跌。",
-                        summary_long="比特币价格继续走弱，市场风险偏好下降。",
-                        sentiment="negative",
-                        impact_level="medium",
-                        countries=["United States"],
-                        tags=["Crypto"],
-                        instruments=["BTCUSDT.CRYPTO"],
-                    ),
-                )
-            ],
+            context=tool.search_service._build_context(hits, "detail"),
+            hit_count=1,
         )
-        mock_chat_model = Mock(llm=object())
 
-        with patch.object(service.search_service, "search", return_value=search_result), patch(
-            "news.service.news_answer.LLMModelFactory.create_chat_model",
-            return_value=mock_chat_model,
-        ):
-            prepared = service._prepare_answer(query="最近比特币为什么跌", top_k=5, max_distance=0.7, timezone_name=None, search_config_overrides=None, query_understanding_overrides=None, answer_config_overrides=None)
-
-        context = prepared.context
+        context = search_result.context
         self.assertIn("matched_chunks:", context)
         self.assertIn("Bitcoin prices fell again as traders reduced exposure.", context)
         self.assertIn("比特币价格继续走弱，市场风险偏好下降。", context)
         self.assertIn("- sentiment: negative", context)
 
-    def test_answer_yields_chunks(self) -> None:
-        service = NewsAnswerService()
-        prepared = Mock(
-            search_result=Mock(hits=[Mock()]),
-            rendered_prompt="rendered prompt",
-            chat_model=Mock(llm=object()),
+    def test_rag_summarize_returns_answer_text(self) -> None:
+        tool = NewsSummaryService()
+        search_result = Mock(
+            response_mode="overview",
+            context="context",
+            hit_count=1,
         )
+        tool.chain = Mock()
+        tool.chain.invoke.return_value = "比特币继续走弱"
 
         with patch.object(
-            service,
-            "_prepare_answer",
-            return_value=prepared,
-        ), patch(
-            "news.service.news_answer.ChatPromptTemplate.from_messages",
-            return_value=MagicMock(),
-        ) as prompt_mock, patch(
-            "news.service.news_answer.StrOutputParser",
-        ) as parser_cls:
-            chain = Mock()
-            chain.stream.return_value = ["比特币", "继续走弱"]
-            mid = MagicMock()
-            prompt_mock.return_value.__or__.return_value = mid
-            mid.__or__.return_value = chain
-            parser_cls.return_value = Mock()
+            tool.search_service,
+            "search",
+            return_value=search_result,
+        ):
+            result = tool.rag_summarize(
+                NewsSummaryQuery(query="最近比特币走势", response_mode="overview")
+            )
 
-            chunks = list(service.answer(query="最近比特币走势"))
-
-        self.assertEqual(chunks, ["比特币", "继续走弱"])
+        self.assertEqual(result, "比特币继续走弱")

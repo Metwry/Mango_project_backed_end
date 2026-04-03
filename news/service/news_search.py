@@ -2,15 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from time import perf_counter
 
 from pgvector.django import CosineDistance
 
 from ai.models import AIAnalysis
 from ai.services import EmbeddingService
-from ai.services.ai_log import ai_log_scope
 from news.models import NewsArticleEmbedding
-from news.service.query_understanding import NewsQueryPlan, QueryUnderstandingService
 
 
 @dataclass(slots=True)
@@ -52,160 +49,164 @@ class NewsSearchHit:
 @dataclass(slots=True)
 class NewsSearchResult:
     query: str
-    semantic_query: str
-    published_from: datetime | None
-    published_to: datetime | None
     response_mode: str
-    hits: list[NewsSearchHit]
+    context: str
+    hit_count: int
 
 
 class NewsSearchService:
     MAX_CANDIDATE_LIMIT = 50
     CANDIDATE_MULTIPLIER = 10
     MAX_MATCHED_CHUNKS_PER_ARTICLE = 3
+    DEFAULT_TOP_K = 8
+    DEFAULT_MAX_DISTANCE = 1.5
+    EMBEDDING_TASK_NAME = "news_article_embedding"
 
     def __init__(self) -> None:
         self.embedding_service = EmbeddingService()
-        self.query_understanding_service = QueryUnderstandingService()
 
     def search(
         self,
         *,
         query: str,
-        top_k: int = 5,
-        max_distance: float | None = 0.7,
-        task_name: str = "news_article_embedding",
-        config_overrides: dict | None = None,
-        query_understanding_overrides: dict | None = None,
-        timezone_name: str | None = None,
-        skip_query_understanding: bool = False,
+        response_mode: str = "overview",
+        top_k: int | None = None,
+        published_from: datetime | None = None,
+        published_to: datetime | None = None,
     ) -> NewsSearchResult:
         normalized_query = query.strip()
         if not normalized_query:
             raise ValueError("query 不能为空")
-        if top_k <= 0:
+        resolved_top_k = top_k or self.DEFAULT_TOP_K
+        if resolved_top_k <= 0:
             raise ValueError("top_k 必须大于 0")
-        if max_distance is not None and max_distance < 0:
-            raise ValueError("max_distance 不能小于 0")
-        with ai_log_scope(event="news_search", query=normalized_query) as scope:
-            step_started_at = perf_counter()
-            if skip_query_understanding:
-                query_plan = NewsQueryPlan(
-                    raw_query=normalized_query,
-                    semantic_query=normalized_query,
-                    published_from=None,
-                    published_to=None,
-                    response_mode="overview",
-                )
-            else:
-                query_plan = self.query_understanding_service.understand(
-                    query=normalized_query,
-                    timezone_name=timezone_name,
-                    config_overrides=query_understanding_overrides,
-                )
-            query_understanding_ms = (perf_counter() - step_started_at) * 1000
-            response_mode = str(getattr(query_plan, "response_mode", "overview")).strip().lower()
-            if response_mode not in {"overview", "detail"}:
-                response_mode = "overview"
-            scope.set(
-                semantic_query=query_plan.semantic_query,
-                published_from=query_plan.published_from,
-                published_to=query_plan.published_to,
-                response_mode=response_mode,
-                skip_query_understanding=skip_query_understanding,
-                query_understanding_ms=round(query_understanding_ms, 2),
-            )
 
-            step_started_at = perf_counter()
-            embedding_result = self.embedding_service.embed(
-                task_name=task_name,
-                texts=[query_plan.semantic_query],
-                config_overrides=config_overrides,
-            )
-            embedding_ms = (perf_counter() - step_started_at) * 1000
-            scope.set(embedding_ms=round(embedding_ms, 2))
-            if not embedding_result.vectors:
-                result = NewsSearchResult(
-                    query=normalized_query,
-                    semantic_query=query_plan.semantic_query,
-                    published_from=query_plan.published_from,
-                    published_to=query_plan.published_to,
-                    response_mode=response_mode,
-                    hits=[],
-                )
-                scope.set(hit_count=0)
-                return result
+        max_distance = self.DEFAULT_MAX_DISTANCE
+        resolved_published_from = published_from
+        resolved_published_to = published_to
 
-            query_vector = embedding_result.vectors[0]
-            candidate_limit = min(
-                max(top_k * self.CANDIDATE_MULTIPLIER, top_k),
-                self.MAX_CANDIDATE_LIMIT,
-            )
-            step_started_at = perf_counter()
-            candidates_queryset = NewsArticleEmbedding.objects.select_related("article")
-            if query_plan.published_from is not None:
-                candidates_queryset = candidates_queryset.filter(published__gte=query_plan.published_from)
-            if query_plan.published_to is not None:
-                candidates_queryset = candidates_queryset.filter(published__lte=query_plan.published_to)
-            candidates = (
-                candidates_queryset
-                .annotate(score=CosineDistance("embedding", query_vector))
-                .order_by("score", "article_id", "chunk_index")[:candidate_limit]
-            )
-
-            best_hits_by_article: dict[int, NewsSearchHit] = {}
-            for candidate in candidates:
-                article_id = candidate.article_id
-                matched_chunk = NewsMatchedChunk(
-                    chunk_index=candidate.chunk_index,
-                    chunk_text=candidate.chunk_text,
-                    score=float(candidate.score),
-                )
-                if article_id in best_hits_by_article:
-                    hit = best_hits_by_article[article_id]
-                    if len(hit.matched_chunks) < self.MAX_MATCHED_CHUNKS_PER_ARTICLE:
-                        hit.matched_chunks.append(matched_chunk)
-                    continue
-                best_hits_by_article[article_id] = NewsSearchHit(
-                    article_id=article_id,
-                    title=candidate.title,
-                    source=candidate.source,
-                    published=candidate.published,
-                    article_url=candidate.article.article_url,
-                    chunk_index=candidate.chunk_index,
-                    chunk_text=candidate.chunk_text,
-                    score=matched_chunk.score,
-                    matched_chunks=[matched_chunk],
-                    analysis=None,
-                )
-
-            hits = sorted(best_hits_by_article.values(), key=lambda item: (item.score, item.article_id))
-            if max_distance is not None:
-                hits = [hit for hit in hits if hit.score <= max_distance]
-            hits = hits[:top_k]
-            vector_search_ms = (perf_counter() - step_started_at) * 1000
-            scope.set(
-                candidate_limit=candidate_limit,
-                candidate_count=len(candidates),
-                vector_search_ms=round(vector_search_ms, 2),
-            )
-
-            step_started_at = perf_counter()
-            self._attach_analysis(hits)
-            analysis_attach_ms = (perf_counter() - step_started_at) * 1000
+        embedding_result = self.embedding_service.embed(
+            task_name=self.EMBEDDING_TASK_NAME,
+            texts=[normalized_query],
+        )
+        if not embedding_result.vectors:
             result = NewsSearchResult(
                 query=normalized_query,
-                semantic_query=query_plan.semantic_query,
-                published_from=query_plan.published_from,
-                published_to=query_plan.published_to,
                 response_mode=response_mode,
-                hits=hits,
-            )
-            scope.set(
-                hit_count=len(hits),
-                analysis_attach_ms=round(analysis_attach_ms, 2),
+                context="",
+                hit_count=0,
             )
             return result
+
+        query_vector = embedding_result.vectors[0]
+        candidate_limit = min(
+            max(resolved_top_k * self.CANDIDATE_MULTIPLIER, resolved_top_k),
+            self.MAX_CANDIDATE_LIMIT,
+        )
+        candidates_queryset = NewsArticleEmbedding.objects.select_related("article")
+        if resolved_published_from is not None:
+            candidates_queryset = candidates_queryset.filter(published__gte=resolved_published_from)
+        if resolved_published_to is not None:
+            candidates_queryset = candidates_queryset.filter(published__lte=resolved_published_to)
+        candidates = (
+            candidates_queryset
+            .annotate(score=CosineDistance("embedding", query_vector))
+            .order_by("score", "article_id", "chunk_index")[:candidate_limit]
+        )
+
+        best_hits_by_article: dict[int, NewsSearchHit] = {}
+        for candidate in candidates:
+            article_id = candidate.article_id
+            matched_chunk = NewsMatchedChunk(
+                chunk_index=candidate.chunk_index,
+                chunk_text=candidate.chunk_text,
+                score=float(candidate.score),
+            )
+            if article_id in best_hits_by_article:
+                hit = best_hits_by_article[article_id]
+                if len(hit.matched_chunks) < self.MAX_MATCHED_CHUNKS_PER_ARTICLE:
+                    hit.matched_chunks.append(matched_chunk)
+                continue
+            best_hits_by_article[article_id] = NewsSearchHit(
+                article_id=article_id,
+                title=candidate.title,
+                source=candidate.source,
+                published=candidate.published,
+                article_url=candidate.article.article_url,
+                chunk_index=candidate.chunk_index,
+                chunk_text=candidate.chunk_text,
+                score=matched_chunk.score,
+                matched_chunks=[matched_chunk],
+                analysis=None,
+            )
+
+        hits = sorted(best_hits_by_article.values(), key=lambda item: (item.score, item.article_id))
+        if max_distance is not None:
+            hits = [hit for hit in hits if hit.score <= max_distance]
+        hits = hits[:resolved_top_k]
+
+        self._attach_analysis(hits)
+        result = NewsSearchResult(
+            query=normalized_query,
+            response_mode=response_mode,
+            context="",
+            hit_count=len(hits),
+        )
+        result.context = self._build_context(hits, response_mode)
+        return result
+
+    @staticmethod
+    def _build_context(hits: list[NewsSearchHit], response_mode: str) -> str:
+        if response_mode == "detail":
+            return NewsSearchService._build_detail_context(hits)
+        return NewsSearchService._build_overview_context(hits)
+
+    @staticmethod
+    def _build_overview_context(hits: list[NewsSearchHit]) -> str:
+        lines: list[str] = []
+        for index, hit in enumerate(hits[:5], start=1):
+            lines.append(f"[{index}] title: {hit.title}")
+            lines.append(f"source: {hit.source}")
+            lines.append(f"published: {hit.published.isoformat()}")
+            lines.append(f"reference_url: {hit.article_url}")
+            lines.append(f"distance: {hit.score:.4f}")
+            if hit.analysis is not None:
+                lines.append("analysis:")
+                lines.append(f"- topic: {hit.analysis.topic}")
+                lines.append(f"- summary_short: {hit.analysis.summary_short}")
+            else:
+                lines.append(f"summary_short: {hit.chunk_text}")
+            lines.append("")
+
+        return "\n".join(lines).strip()
+
+    @staticmethod
+    def _build_detail_context(hits: list[NewsSearchHit]) -> str:
+        lines: list[str] = []
+        for index, hit in enumerate(hits[:8], start=1):
+            lines.append(f"[{index}] title: {hit.title}")
+            lines.append(f"source: {hit.source}")
+            lines.append(f"published: {hit.published.isoformat()}")
+            lines.append(f"reference_url: {hit.article_url}")
+            lines.append(f"distance: {hit.score:.4f}")
+            if hit.analysis is not None:
+                lines.append("analysis:")
+                lines.append(f"- topic: {hit.analysis.topic}")
+                lines.append(f"- summary_short: {hit.analysis.summary_short}")
+                lines.append(f"- summary_long: {hit.analysis.summary_long}")
+                lines.append(f"- sentiment: {hit.analysis.sentiment}")
+                lines.append(f"- impact_level: {hit.analysis.impact_level}")
+                lines.append(f"- countries: {', '.join(hit.analysis.countries)}")
+                lines.append(f"- tags: {', '.join(hit.analysis.tags)}")
+                lines.append(f"- instruments: {', '.join(hit.analysis.instruments)}")
+            lines.append("matched_chunks:")
+            for chunk in hit.matched_chunks:
+                lines.append(
+                    f"- chunk_index={chunk.chunk_index}, distance={chunk.score:.4f}, text={chunk.chunk_text}"
+                )
+            lines.append("")
+
+        return "\n".join(lines).strip()
 
     @staticmethod
     def _attach_analysis(hits: list[NewsSearchHit]) -> None:

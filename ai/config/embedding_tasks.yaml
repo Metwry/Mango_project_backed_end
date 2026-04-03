@@ -1,14 +1,8 @@
-defaults:
-  provider: aliyun
-  network_retry_attempts: 3
-  network_retry_base_delay: 1
-
 tasks:
   news_article_embedding:
+    provider: aliyun
+    model: text-embedding-v4
     batch_size: 10
-    models:
-      aliyun: text-embedding-v4
-      openai: text-embedding-3-small
     chunk:
       max_chars: 2400
       overlap_chars: 180

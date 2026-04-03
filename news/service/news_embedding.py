@@ -9,7 +9,7 @@ from django.db import transaction
 from ai.config import get_embedding_task_config
 from ai.services import EmbeddingService
 from news.models import NewsArticle, NewsArticleEmbedding
-from news.service.hash_utils import calculate_content_md5
+from news.utils.hash import calculate_content_md5
 
 
 @dataclass(slots=True)

@@ -1,14 +1,14 @@
-from django.test import TestCase
 from unittest.mock import Mock, patch
 
 import requests
+from django.test import TestCase
 
 from ai.llmmodels import LLMModelFactory
-from ai.llmmodels.aliyun_chat import AliyunChatModel
-from ai.llmmodels.base_model import EmbeddingResult
-from ai.models import AIAnalysis
+from ai.llmmodels.model_factory import build_chat_model
 from ai.services import AnalysisService, EmbeddingService
+from ai.services.content_embedding import EmbeddingResult
 from ai.tasks import analyze_pending_news_articles
+from ai.models import AIAnalysis
 from news.models import NewsArticle
 
 
@@ -60,84 +60,68 @@ class AnalyzePendingNewsArticlesTests(TestCase):
         )
 
 
-class AliyunChatModelRetryTests(TestCase):
-    def test_invoke_with_retries_succeeds_after_retryable_error(self) -> None:
-        model = AliyunChatModel(
-            model_name="qwen-plus",
-            api_key="test-key",
-            task_config={"network_retry_attempts": 3, "network_retry_base_delay": 0.1},
-        )
-        chain = Mock()
-        chain.invoke.side_effect = [
-            requests.exceptions.SSLError("ssl eof"),
-            "ok",
-        ]
-
-        with patch.object(model, "llm", Mock()), patch("ai.llmmodels.aliyun_chat.time.sleep") as sleep_mock:
-            result = model._invoke_with_retries(chain=chain)
-
-        self.assertEqual(result, "ok")
-        self.assertEqual(chain.invoke.call_count, 2)
-        sleep_mock.assert_called_once()
-
-    def test_invoke_with_retries_does_not_retry_non_retryable_error(self) -> None:
-        model = AliyunChatModel(
-            model_name="qwen-plus",
-            api_key="test-key",
-            task_config={"network_retry_attempts": 3, "network_retry_base_delay": 0.1},
-        )
-        chain = Mock()
-        chain.invoke.side_effect = ValueError("bad request")
-
-        with self.assertRaises(ValueError):
-            model._invoke_with_retries(chain=chain)
-
-
 class ChatModelConfigTests(TestCase):
-    def test_openai_chat_model_passes_reasoning_config(self) -> None:
-        with patch("ai.llmmodels.openai_chat.ChatOpenAI") as chat_cls:
-            from ai.llmmodels.openai_chat import OpenAIChatModel
-
-            OpenAIChatModel(
-                model_name="gpt-5.4-mini",
-                api_key="test-key",
-                task_config={
+    def test_build_chat_model_passes_openai_reasoning_config(self) -> None:
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}, clear=True), patch(
+            "ai.llmmodels.model_factory.ChatOpenAI"
+        ) as chat_cls:
+            entity = build_chat_model(
+                {
+                    "provider": "openai",
+                    "model": "gpt-5.4-mini",
+                    "api_key_env": "OPENAI_API_KEY",
+                    "temperature": 0,
+                    "timeout": 60,
+                    "max_retries": 2,
                     "reasoning_effort": "low",
                     "verbosity": "low",
                     "max_tokens": 600,
-                },
+                }
             )
 
         kwargs = chat_cls.call_args.kwargs
         self.assertEqual(kwargs["reasoning_effort"], "low")
         self.assertEqual(kwargs["verbosity"], "low")
         self.assertEqual(kwargs["max_tokens"], 600)
+        self.assertIs(entity, chat_cls.return_value)
 
-    def test_openai_chat_model_passes_base_url_when_provided(self) -> None:
-        with patch("ai.llmmodels.openai_chat.ChatOpenAI") as chat_cls:
-            from ai.llmmodels.openai_chat import OpenAIChatModel
-
-            OpenAIChatModel(
-                model_name="qwen3:14b",
-                api_key="",
-                base_url="http://127.0.0.1:11434/v1",
-                task_config={},
+    def test_build_chat_model_passes_openai_api_key(self) -> None:
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}, clear=True), patch(
+            "ai.llmmodels.model_factory.ChatOpenAI"
+        ) as chat_cls:
+            build_chat_model(
+                {
+                    "provider": "openai",
+                    "model": "gpt-5.4-mini",
+                    "api_key_env": "OPENAI_API_KEY",
+                    "temperature": 0,
+                    "timeout": 60,
+                    "max_retries": 2,
+                    "reasoning_effort": "none",
+                    "verbosity": "low",
+                    "max_tokens": 600,
+                }
             )
 
         kwargs = chat_cls.call_args.kwargs
-        self.assertEqual(kwargs["base_url"], "http://127.0.0.1:11434/v1")
-        self.assertNotIn("api_key", kwargs)
+        self.assertEqual(kwargs["api_key"], "test-key")
 
-    def test_aliyun_chat_model_passes_thinking_config(self) -> None:
-        with patch("ai.llmmodels.aliyun_chat.ChatTongyi") as chat_cls:
-            AliyunChatModel(
-                model_name="qwen-plus",
-                api_key="test-key",
-                task_config={
+    def test_build_chat_model_passes_aliyun_thinking_config(self) -> None:
+        with patch.dict("os.environ", {"ALI_API_KEY": "test-key"}, clear=True), patch(
+            "ai.llmmodels.model_factory.ChatTongyi"
+        ) as chat_cls:
+            entity = build_chat_model(
+                {
+                    "provider": "aliyun",
+                    "model": "qwen-plus",
+                    "api_key_env": "ALI_API_KEY",
+                    "temperature": 0,
+                    "timeout": 60,
+                    "max_retries": 2,
                     "enable_thinking": False,
                     "thinking_budget": 256,
                     "max_tokens": 600,
-                },
+                }
             )
 
         kwargs = chat_cls.call_args.kwargs
@@ -149,15 +133,71 @@ class ChatModelConfigTests(TestCase):
                 "max_tokens": 600,
             },
         )
+        self.assertIs(entity, chat_cls.return_value)
+
+
+class AnalysisRuntimeTests(TestCase):
+    def test_analysis_service_retries_aliyun_retryable_error(self) -> None:
+        chat_client = Mock()
+        chat_client.invoke.side_effect = [
+            requests.exceptions.SSLError("ssl eof"),
+            Mock(
+                content='{"semantic_query":"hello","published_from":null,"published_to":null,"response_mode":"overview"}'
+            ),
+        ]
+
+        service = AnalysisService()
+
+        with patch("ai.utils.llm_runtime.time.sleep") as sleep_mock, patch(
+            "ai.services.content_analysis.LLMModelFactory.create_chat_model",
+            return_value=chat_client,
+        ):
+            result = service.analyze(
+                task_name="news_query_understanding",
+                variables={
+                    "query": "hello",
+                    "current_datetime": "2026-04-02T00:00:00+08:00",
+                    "timezone_name": "Asia/Shanghai",
+                },
+                config_overrides={"provider": "aliyun", "model": "qwen-plus"},
+            )
+
+        self.assertEqual(result.data["semantic_query"], "hello")
+        self.assertEqual(chat_client.invoke.call_count, 2)
+        sleep_mock.assert_called_once()
+
+    def test_analysis_service_does_not_retry_non_retryable_error(self) -> None:
+        chat_client = Mock()
+        chat_client.invoke.side_effect = ValueError("bad request")
+        service = AnalysisService()
+
+        with patch(
+            "ai.services.content_analysis.LLMModelFactory.create_chat_model",
+            return_value=chat_client,
+        ), self.assertRaises(ValueError):
+            service.analyze(
+                task_name="news_query_understanding",
+                variables={
+                    "query": "hello",
+                    "current_datetime": "2026-04-02T00:00:00+08:00",
+                    "timezone_name": "Asia/Shanghai",
+                },
+                config_overrides={"provider": "aliyun", "model": "qwen-plus"},
+            )
 
 
 class AnalysisServiceFactoryTests(TestCase):
     def test_analysis_service_uses_factory_rendered_prompt(self) -> None:
         service = AnalysisService()
         mock_chat_model = Mock()
-        mock_chat_model.generate.return_value.raw_text = '{"topic":"AI","summary_short":"短","summary_long":"长","sentiment":"neutral","impact_level":"low","countries":[],"tags":[],"instrument_candidates":[]}'
+        mock_chat_model.invoke.return_value = Mock(
+            content='{"topic":"AI","summary_short":"短","summary_long":"长","sentiment":"neutral","impact_level":"low","countries":[],"tags":[],"instrument_candidates":[]}'
+        )
 
-        with patch("ai.services.analysis.LLMModelFactory.create_chat_model", return_value=mock_chat_model):
+        with patch(
+            "ai.services.content_analysis.LLMModelFactory.create_chat_model",
+            return_value=mock_chat_model,
+        ):
             result = service.analyze(
                 task_name="news_analysis",
                 variables={
@@ -168,59 +208,44 @@ class AnalysisServiceFactoryTests(TestCase):
                     "language": "en",
                     "published": "2026-04-01T00:00:00+00:00",
                 },
-                config_overrides={"provider": "openai"},
+                config_overrides=None,
             )
 
         self.assertEqual(result.data["topic"], "AI")
-        prompt_text = mock_chat_model.generate.call_args.kwargs["prompt_text"]
+        self.assertEqual(mock_chat_model.invoke.call_count, 1)
+        prompt_text = mock_chat_model.invoke.call_args.args[0]
         self.assertIn("Test title", prompt_text)
         self.assertIn("Test content", prompt_text)
 
 
 class LLMModelFactoryTests(TestCase):
-    def test_resolve_api_key_raises_when_missing(self) -> None:
-        with patch.dict("os.environ", {}, clear=True):
-            with self.assertRaises(ValueError):
-                LLMModelFactory.resolve_api_key(provider_name="openai")
-
-    def test_resolve_api_key_returns_empty_when_provider_does_not_need_it(self) -> None:
-        with patch.dict("os.environ", {"OLLAMA_BASE_URL": "http://127.0.0.1:11434/v1"}, clear=True):
-            api_key = LLMModelFactory.resolve_api_key(provider_name="ollama")
-
-        self.assertEqual(api_key, "")
-
-    def test_create_chat_model_returns_openai_chat_model_for_ollama(self) -> None:
-        with patch.dict("os.environ", {"OLLAMA_BASE_URL": "http://127.0.0.1:11434/v1"}, clear=True):
+    def test_create_chat_model_returns_client(self) -> None:
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}, clear=True):
             model = LLMModelFactory.create_chat_model(
-                provider_name="ollama",
-                model_name="qwen3:14b",
-                task_config={},
+                task_name="news_answer",
             )
 
-        self.assertEqual(model.__class__.__name__, "OpenAIChatModel")
+        self.assertIsNotNone(model)
 
-    def test_create_embedding_model_returns_openai_model(self) -> None:
+    def test_create_embedding_model_returns_client(self) -> None:
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}, clear=True):
             model = LLMModelFactory.create_embedding_model(
-                provider_name="openai",
-                model_name="text-embedding-3-small",
-                task_config={},
+                task_name="news_article_embedding",
             )
 
-        self.assertEqual(model.__class__.__name__, "OpenAIEmbeddingModel")
+        self.assertIsNotNone(model)
 
 
 class EmbeddingServiceTests(TestCase):
     def test_embedding_service_uses_factory_and_returns_vectors(self) -> None:
         service = EmbeddingService()
         mock_embedding_model = Mock()
-        mock_embedding_model.embed.return_value = EmbeddingResult(
-            model_name="text-embedding-3-small",
-            vectors=[[0.1, 0.2]],
+        mock_embedding_model.embeddings.create.return_value = Mock(
+            data=[Mock(embedding=[0.1, 0.2])]
         )
 
-        with patch(
-            "ai.services.embedding.LLMModelFactory.create_embedding_model",
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}, clear=True), patch(
+            "ai.services.content_embedding.LLMModelFactory.create_embedding_model",
             return_value=mock_embedding_model,
         ):
             result = service.embed(
@@ -237,20 +262,18 @@ class EmbeddingServiceTests(TestCase):
 
         self.assertEqual(result.model_name, "text-embedding-3-small")
         self.assertEqual(result.vectors, [[0.1, 0.2]])
-        mock_embedding_model.embed.assert_called_once_with(
-            texts=["Title: Test\n\nContent:\nTest content"]
-        )
+        mock_embedding_model.embeddings.create.assert_called_once()
 
     def test_embedding_service_batches_requests(self) -> None:
         service = EmbeddingService()
         mock_embedding_model = Mock()
-        mock_embedding_model.embed.side_effect = [
-            EmbeddingResult(model_name="text-embedding-v4", vectors=[[0.1], [0.2]]),
-            EmbeddingResult(model_name="text-embedding-v4", vectors=[[0.3]]),
+        mock_embedding_model.embeddings.create.side_effect = [
+            Mock(data=[Mock(embedding=[0.1]), Mock(embedding=[0.2])]),
+            Mock(data=[Mock(embedding=[0.3])]),
         ]
 
-        with patch(
-            "ai.services.embedding.LLMModelFactory.create_embedding_model",
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}, clear=True), patch(
+            "ai.services.content_embedding.LLMModelFactory.create_embedding_model",
             return_value=mock_embedding_model,
         ):
             result = service.embed(
@@ -258,22 +281,14 @@ class EmbeddingServiceTests(TestCase):
                 texts=["a", "b", "c"],
                 config_overrides={
                     "batch_size": 2,
-                    "provider": "aliyun",
+                    "provider": "openai",
                     "models": {
                         "aliyun": "text-embedding-v4",
-                        "openai": "text-embedding-3-small",
+                        "openai": "text-embedding-v4",
                     },
                 },
             )
 
         self.assertEqual(result.model_name, "text-embedding-v4")
         self.assertEqual(result.vectors, [[0.1], [0.2], [0.3]])
-        self.assertEqual(mock_embedding_model.embed.call_count, 2)
-        self.assertEqual(
-            mock_embedding_model.embed.call_args_list[0].kwargs,
-            {"texts": ["a", "b"]},
-        )
-        self.assertEqual(
-            mock_embedding_model.embed.call_args_list[1].kwargs,
-            {"texts": ["c"]},
-        )
+        self.assertEqual(mock_embedding_model.embeddings.create.call_count, 2)

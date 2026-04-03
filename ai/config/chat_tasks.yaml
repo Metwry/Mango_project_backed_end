@@ -1,30 +1,24 @@
-defaults:
-  provider: aliyun
-  temperature: 0
-  timeout: 60
-  max_retries: 2
-  expects_json: true
-
-providers:
-  aliyun:
-    api_key_env: ALI_API_KEY
-  openai:
-    api_key_env: OPENAI_API_KEY
-  ollama:
-    base_url_env: OLLAMA_BASE_URL
-
 tasks:
+  system_agent:
+    provider: openai
+    model: gpt-5.4-mini
+    prompt_file: system_agent.txt
+    expects_json: false
+  news_analysis:
+    provider: aliyun
+    model: qwen-plus
+    prompt_file: news_analysis.txt
+    source_type: news_article
+    expects_json: true
   news_query_understanding:
-    prompt_file: news_query_understanding.txt
     provider: openai
     model: gpt-5.4-mini
-    reasoning_effort: none
-    verbosity: low
+    prompt_file: news_query_rewrite.txt
+    expects_json: true
+    max_tokens: 300
   news_answer:
-    prompt_file: news_answer.txt
     provider: openai
     model: gpt-5.4-mini
-    reasoning_effort: none
-    verbosity: low
-    max_tokens: 900
-    expects_json: none
+    prompt_file: news_answer.txt
+    expects_json: false
+    max_tokens: 1800

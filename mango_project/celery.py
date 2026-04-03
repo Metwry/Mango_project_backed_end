@@ -3,6 +3,7 @@ import logging
 
 from celery import Celery
 from celery.signals import beat_init
+from common.celery_task_logging import register_task_logging
 
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mango_project.settings")
@@ -10,6 +11,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mango_project.settings")
 app = Celery("mango_project")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
+register_task_logging()
 
 logger = logging.getLogger(__name__)
 

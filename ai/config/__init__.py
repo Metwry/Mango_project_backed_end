@@ -9,58 +9,100 @@ import yaml
 
 CONFIG_DIR = Path(__file__).resolve().parent
 PROMPTS_DIR = CONFIG_DIR.parent / "prompts"
-ANALYSIS_CONFIG_PATH = CONFIG_DIR / "analysis_tasks.yaml"
+PROVIDERS_CONFIG_PATH = CONFIG_DIR / "providers.yaml"
 CHAT_CONFIG_PATH = CONFIG_DIR / "chat_tasks.yaml"
 EMBEDDING_CONFIG_PATH = CONFIG_DIR / "embedding_tasks.yaml"
 
 
-@lru_cache(maxsize=1)
-def load_analysis_config() -> dict[str, Any]:
-    with ANALYSIS_CONFIG_PATH.open("r", encoding="utf-8") as fp:
-        return yaml.safe_load(fp) or {}
+class ConfigObject(dict):
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+
+def _to_config_object(value: Any) -> Any:
+    if isinstance(value, dict):
+        return ConfigObject({key: _to_config_object(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return [_to_config_object(item) for item in value]
+    return value
 
 
 @lru_cache(maxsize=1)
-def load_chat_config() -> dict[str, Any]:
+def load_providers_config() -> ConfigObject:
+    with PROVIDERS_CONFIG_PATH.open("r", encoding="utf-8") as fp:
+        return _to_config_object(yaml.safe_load(fp))
+
+
+@lru_cache(maxsize=1)
+def load_chat_config() -> ConfigObject:
     with CHAT_CONFIG_PATH.open("r", encoding="utf-8") as fp:
-        return yaml.safe_load(fp) or {}
+        return _to_config_object(yaml.safe_load(fp))
 
 
 @lru_cache(maxsize=1)
-def load_embedding_config() -> dict[str, Any]:
+def load_embedding_config() -> ConfigObject:
     with EMBEDDING_CONFIG_PATH.open("r", encoding="utf-8") as fp:
-        return yaml.safe_load(fp) or {}
+        return _to_config_object(yaml.safe_load(fp))
 
 
-def get_analysis_task_config(task_name: str) -> dict[str, Any]:
-    for config in (load_analysis_config(), load_chat_config()):
-        defaults = dict(config.get("defaults", {}))
-        task_config = config.get("tasks", {}).get(task_name)
-        if task_config:
-            merged = {**defaults, **task_config}
-            merged["task_name"] = task_name
-            return merged
-    raise KeyError(f"未找到分析任务配置: {task_name}")
+def get_chat_task_config(task_name: str) -> ConfigObject:
+    return load_chat_config().tasks[task_name]
 
 
-def get_embedding_task_config(task_name: str) -> dict[str, Any]:
-    config = load_embedding_config()
-    defaults = dict(config.get("defaults", {}))
-    task_config = config.get("tasks", {}).get(task_name)
-    if not task_config:
-        raise KeyError(f"未找到嵌入任务配置: {task_name}")
-    merged = {**defaults, **task_config}
-    merged["task_name"] = task_name
-    return merged
+def get_analysis_task_config(task_name: str) -> ConfigObject:
+    return get_chat_task_config(task_name)
 
 
-def get_provider_config(provider_name: str) -> dict[str, Any]:
-    for config in (load_analysis_config(), load_chat_config()):
-        provider_config = config.get("providers", {}).get(provider_name)
-        if provider_config:
-            return dict(provider_config)
-    raise KeyError(f"未找到模型提供商配置: {provider_name}")
+def get_embedding_task_config(task_name: str) -> ConfigObject:
+    return load_embedding_config().tasks[task_name]
+
+
+def get_provider_config(provider_name: str) -> ConfigObject:
+    return load_providers_config().providers[provider_name]
+
+
+def get_chat_model_config(task_name: str) -> ConfigObject:
+    task_config = get_chat_task_config(task_name)
+    provider_config = get_provider_config(task_config.provider)
+    model_config = provider_config.chat_models[task_config.model]
+    return ConfigObject(
+        {
+            "provider": task_config.provider,
+            "model": task_config.model,
+            "api_key_env": provider_config.api_key_env,
+            "temperature": model_config.temperature,
+            "timeout": model_config.timeout,
+            "max_retries": model_config.max_retries,
+            "max_tokens": getattr(task_config, "max_tokens", model_config.max_tokens),
+            "reasoning_effort": getattr(task_config, "reasoning_effort", getattr(model_config, "reasoning_effort", None)),
+            "verbosity": getattr(task_config, "verbosity", getattr(model_config, "verbosity", None)),
+            "enable_thinking": getattr(task_config, "enable_thinking", getattr(model_config, "enable_thinking", None)),
+            "thinking_budget": getattr(task_config, "thinking_budget", getattr(model_config, "thinking_budget", None)),
+        }
+    )
+
+
+def get_embedding_model_config(task_name: str) -> ConfigObject:
+    task_config = get_embedding_task_config(task_name)
+    provider_config = get_provider_config(task_config.provider)
+    model_config = provider_config.embedding_models[task_config.model]
+    return ConfigObject(
+        {
+            "provider": task_config.provider,
+            "model": task_config.model,
+            "api_key_env": provider_config.api_key_env,
+            "batch_size": getattr(task_config, "batch_size", model_config.batch_size),
+        }
+    )
 
 
 def get_prompt_path(prompt_file: str) -> Path:
     return PROMPTS_DIR / prompt_file
+
+
+def get_prompt_text(task_name: str) -> str:
+    task_config = get_chat_task_config(task_name)
+    return get_prompt_path(task_config.prompt_file).read_text(encoding="utf-8")

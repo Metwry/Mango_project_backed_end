@@ -5,17 +5,17 @@ import html
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from pathlib import Path
+from datetime import datetime, timezone as dt_timezone
+from email.utils import parsedate_to_datetime
 from typing import Literal
 from urllib.parse import urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup, NavigableString, Tag
 
-try:
-    from news.service.filters_word import is_noise_paragraph, is_tail_cutoff
-except ModuleNotFoundError:
-    from filters_word import is_noise_paragraph, is_tail_cutoff
+from news.utils.cleanup import clean_stored_article_content
+from news.utils.hash import calculate_content_md5
+from news.utils.text_filters import is_noise_paragraph, is_tail_cutoff
 
 
 RSS_URL = "https://finance.yahoo.com/news/rss"
@@ -100,13 +100,17 @@ class FigureCaptionBlock(ContentBlock):
     text: str
 
 
-@dataclass
-class YahooNewsArticle:
-    title: str
-    link: str
-    published_at: str
+@dataclass(slots=True)
+class PreparedNewsArticle:
+    provider: str
     source: str
+    article_url: str
+    title: str
     content: str
+    content_hash: str
+    language: str
+    published: datetime
+    fetched_at: datetime
     blocks: list[ContentBlock] = field(default_factory=list)
 
 
@@ -439,6 +443,37 @@ def extract_article_text(page_html: str, article_title: str | None = None) -> st
     return render_blocks_text(extract_article_blocks(page_html, article_title=article_title))
 
 
+def parse_published_at(value: str) -> datetime:
+    raw_value = str(value).strip()
+    if not raw_value:
+        raise ValueError("published_at is empty")
+
+    try:
+        parsed = parsedate_to_datetime(raw_value)
+    except (TypeError, ValueError, IndexError):
+        iso_value = raw_value.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(iso_value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt_timezone.utc)
+    return parsed.astimezone(dt_timezone.utc)
+
+
+def prepare_article(item: dict[str, str], *, content: str, blocks: list[ContentBlock]) -> PreparedNewsArticle:
+    cleaned_content = clean_stored_article_content(content)
+    return PreparedNewsArticle(
+        provider="yahoo",
+        source=item["source"],
+        article_url=item["link"],
+        title=item["title"],
+        content=cleaned_content,
+        content_hash=calculate_content_md5(cleaned_content),
+        language="en",
+        published=parse_published_at(item["published_at"]),
+        fetched_at=datetime.now(dt_timezone.utc),
+        blocks=blocks,
+    )
+
+
 async def fetch_text(
     session: aiohttp.ClientSession,
     url: str,
@@ -472,7 +507,7 @@ async def fetch_article_content(
     session: aiohttp.ClientSession,
     item: dict[str, str],
     semaphore: asyncio.Semaphore,
-) -> YahooNewsArticle | None:
+) -> PreparedNewsArticle | None:
     async with semaphore:
         try:
             page_html = await fetch_text(session, item["link"])
@@ -482,21 +517,14 @@ async def fetch_article_content(
             print(f"Skip article: {item['link']} | {exc}")
             return None
 
-    return YahooNewsArticle(
-        title=item["title"],
-        link=item["link"],
-        published_at=item["published_at"],
-        source=item["source"],
-        content=content,
-        blocks=blocks,
-    )
+    return prepare_article(item, content=content, blocks=blocks)
 
 
 async def fetch_yahoo_finance_articles(
     rss_url: str = RSS_URL,
     limit: int = DEFAULT_LIMIT,
     concurrency: int = DEFAULT_CONCURRENCY,
-) -> list[YahooNewsArticle]:
+) -> list[PreparedNewsArticle]:
     connector = aiohttp.TCPConnector(limit_per_host=concurrency)
     async with aiohttp.ClientSession(
         headers=DEFAULT_HEADERS,
@@ -520,7 +548,7 @@ def fetch_yahoo_finance_articles_sync(
     rss_url: str = RSS_URL,
     limit: int = DEFAULT_LIMIT,
     concurrency: int = DEFAULT_CONCURRENCY,
-) -> list[YahooNewsArticle]:
+) -> list[PreparedNewsArticle]:
     return asyncio.run(
         fetch_yahoo_finance_articles(
             rss_url=rss_url,
@@ -528,37 +556,3 @@ def fetch_yahoo_finance_articles_sync(
             concurrency=concurrency,
         )
     )
-
-
-def render_articles_text(articles: list[YahooNewsArticle]) -> str:
-    blocks: list[str] = [f"Fetched {len(articles)} articles.", ""]
-    for index, article in enumerate(articles, start=1):
-        blocks.append(f"[{index}] {article.title}")
-        blocks.append(f"Source: {article.source}")
-        blocks.append(f"Published: {article.published_at}")
-        blocks.append(f"Link: {article.link}")
-        blocks.append("Content:")
-        blocks.append(article.content)
-        blocks.append("")
-        blocks.append("=" * 80)
-        blocks.append("")
-    return "\n".join(blocks).strip() + "\n"
-
-
-def save_articles_to_txt(
-    articles: list[YahooNewsArticle],
-    output_path: str | Path | None = None,
-) -> Path:
-    path = Path(output_path) if output_path is not None else Path(__file__).with_name("data.txt")
-    path.write_text(render_articles_text(articles), encoding="utf-8")
-    return path
-
-
-if __name__ == "__main__":
-    articles = fetch_yahoo_finance_articles_sync(
-        limit=DEFAULT_LIMIT,
-        concurrency=DEFAULT_CONCURRENCY,
-    )
-    output_file = save_articles_to_txt(articles)
-    print(f"Fetched {len(articles)} articles.")
-    print(f"Saved to: {output_file}")
