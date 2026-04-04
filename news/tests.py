@@ -1,14 +1,13 @@
 import asyncio
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
 from django.test import SimpleTestCase
 from django.test import TestCase
-from django.utils import timezone
 
 from ai.services.query_rewrite import QueryUnderstandingService
-from ai.agent.rag.newsSummaryService import NewsSummaryQuery, NewsSummaryService
+from ai.rag import NewsSummaryQuery, NewsSummaryService
 from ai.models import AIAnalysis, AIAnalysisCountry, AIAnalysisInstrument, AIAnalysisTag
 from market.models import Instrument
 from news.models import NewsArticle, NewsArticleEmbedding
