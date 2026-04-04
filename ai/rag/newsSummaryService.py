@@ -11,13 +11,13 @@ from ai.llmmodels import LLMModelFactory
 from news.service.news_search import NewsSearchResult, NewsSearchService
 
 
+
 class NewsSummaryQuery(BaseModel):
     query: str = Field(description="用户的问题")
     response_mode: str = Field(description="回答模式: overview 或 detail")
     top_k: int | None = Field(default=None, description="检索条数")
     published_from: datetime | None = Field(default=None, description="开始时间")
     published_to: datetime | None = Field(default=None, description="结束时间")
-
 
 
 class NewsSummaryService:

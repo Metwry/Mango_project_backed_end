@@ -22,3 +22,9 @@ tasks:
     prompt_file: news_answer.txt
     expects_json: false
     max_tokens: 1800
+  position_summary:
+    provider: openai
+    model: gpt-5.4-mini
+    prompt_file: position_summary.txt
+    expects_json: false
+    max_tokens: 1600

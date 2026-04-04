@@ -1,0 +1,135 @@
+from __future__ import annotations
+from typing import TypedDict
+from django.db.models import Max
+
+from ai.agent.agent import ReactAgent
+from ai.models import ChatMessage, ChatSession
+
+_react_agent = ReactAgent()
+
+
+
+class SessionMessage(TypedDict):
+    role: str
+    content: str
+
+
+def get_or_create_session(*, user, session_id: int | None = None, title: str | None = None) -> ChatSession:
+    if session_id is not None:
+        return ChatSession.objects.get(id=session_id, user=user)
+
+    session_title = (title or "").strip() or "新对话"
+    return ChatSession.objects.create(user=user, title=session_title)
+
+
+def next_message_sequence(*, session: ChatSession) -> int:
+    current_max = session.messages.aggregate(max_sequence=Max("sequence"))["max_sequence"]
+    return int(current_max or 0) + 1
+
+
+def append_message(*, session: ChatSession, role: str, content: str) -> ChatMessage:
+    message = ChatMessage.objects.create(
+        session=session,
+        role=role,
+        content=content,
+        sequence=next_message_sequence(session=session),
+    )
+    session.save(update_fields=["updated_at"])
+    return message
+
+
+def append_user_message(*, session: ChatSession, content: str) -> ChatMessage:
+    return append_message(session=session, role=ChatMessage.Role.USER, content=content)
+
+
+def append_assistant_message(*, session: ChatSession, content: str) -> ChatMessage:
+    return append_message(session=session, role=ChatMessage.Role.ASSISTANT, content=content)
+
+
+def build_session_messages(*, session: ChatSession, max_messages: int | None = 30) -> list[SessionMessage]:
+    queryset = session.messages.order_by("-sequence", "-id")
+    if max_messages is not None:
+        queryset = queryset[:max_messages]
+
+    rows = list(queryset)
+    rows.reverse()
+
+    return [
+        {
+            "role": message.role.lower(),
+            "content": message.content,
+        }
+        for message in rows
+    ]
+
+def run_chat(*, user, query: str, session_id: int | None = None) -> dict:
+    session = get_or_create_session(
+        user = user,
+        session_id=session_id,
+        title=query[:20]
+    )
+    append_user_message(session=session, content=query)
+    messages = build_session_messages(session=session)
+    answer = _react_agent.execute(
+        messages=messages,
+        context={
+            "user_id": user.id,
+            "session_id": session.id,
+        },
+    )
+    append_assistant_message(session=session, content=answer)
+    return {
+        "session_id": session.id,
+        "answer": answer,
+    }
+
+
+def stream_chat(*, user, query: str, session_id: int | None = None):
+    session = get_or_create_session(
+        user=user,
+        session_id=session_id,
+        title=query[:20],
+    )
+    append_user_message(session=session, content=query)
+    messages = build_session_messages(session=session)
+    context = {
+        "user_id": user.id,
+        "session_id": session.id,
+    }
+
+    yield {
+        "event": "start",
+        "data": {
+            "session_id": session.id,
+        },
+    }
+
+    chunks: list[str] = []
+    try:
+        for chunk in _react_agent.stream_execute(messages=messages, context=context):
+            if not chunk:
+                continue
+            chunks.append(chunk)
+            yield {
+                "event": "delta",
+                "data": chunk,
+            }
+
+        answer = "".join(chunks).strip()
+        append_assistant_message(session=session, content=answer)
+        yield {
+            "event": "done",
+            "data": {
+                "session_id": session.id,
+            },
+        }
+    except Exception:
+        error_message = "当前请求处理失败，请稍后重试。"
+        append_assistant_message(session=session, content=error_message)
+        yield {
+            "event": "error",
+            "data": {
+                "session_id": session.id,
+                "message": error_message,
+            },
+        }

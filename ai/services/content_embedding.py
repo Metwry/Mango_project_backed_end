@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 
-from ai.config import get_embedding_model_config, get_embedding_task_config, get_provider_config
+from ai.config import get_embedding_model_config, get_embedding_task_config
 from ai.llmmodels import LLMModelFactory
-from ai.utils.llm_runtime import embed_texts
+from ai.llmmodels.llm_runtime import embed_texts
 
 
 @dataclass(slots=True)
