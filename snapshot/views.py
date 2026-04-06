@@ -2,11 +2,17 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .serializers import AccountSnapshotQuerySerializer, PositionSnapshotQuerySerializer
-from .services.query_service import build_account_snapshot_query_result, build_position_snapshot_query_result
+from .serializers import (
+    AccountSnapshotQuerySerializer,
+    PositionSnapshotQuerySerializer,
+)
+from .services.query_service import (
+    build_account_snapshot_query_result,
+    build_position_snapshot_query_result,
+)
 
 
-class AccountSnapshotQueryView(APIView):
+class AccountSnapshotQueryView (APIView):
     # 查询账户维度的快照时间序列数据。
     def get(self, request, *args, **kwargs):
         serializer = AccountSnapshotQuerySerializer(data=request.query_params)

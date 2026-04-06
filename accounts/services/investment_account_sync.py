@@ -10,7 +10,7 @@ from common.normalize import strip_market_suffix
 from common.utils import market_currency, quantize_decimal, to_decimal
 from investment.models import Position
 from market.services.pricing.cache import build_quote_index, get_market_data_payload
-from market.services.pricing.fx import load_cached_usd_rates
+from market.services.pricing.fx import get_usd_base_fx_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,11 @@ def calculate_investment_account_valuation(
     target_currency: str,
 ) -> InvestmentAccountValuation:
     account_currency = target_currency or "USD"
-    usd_rates = load_cached_usd_rates()
+    fx_snapshot = get_usd_base_fx_snapshot()
+    usd_rates = {
+        code: Decimal(str(rate))
+        for code, rate in fx_snapshot["rates"].items()
+    }
     quote_index = build_quote_index(get_market_data_payload())
 
     total_usd = POSITION_ZERO

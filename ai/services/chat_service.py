@@ -1,17 +1,35 @@
 from __future__ import annotations
 from typing import TypedDict
 from django.db.models import Max
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from ai.agent.agent import ReactAgent
+from ai.agent.trading_agent import TradingWorkflow
 from ai.models import ChatMessage, ChatSession
+from ai.services.trade_workflow_store import has_active_trade_draft
 
 _react_agent = ReactAgent()
+_trading_workflow = TradingWorkflow()
 
 
 
 class SessionMessage(TypedDict):
     role: str
     content: str
+
+
+def _looks_like_trade_query(query: str) -> bool:
+    text = str(query or "").strip()
+    if not text:
+        return False
+    keywords = ["买", "卖", "加仓", "减仓", "清仓", "确认", "取消", "执行"]
+    return any(token in text for token in keywords)
+
+
+def _should_use_trading_workflow(*, user, session: ChatSession, query: str) -> bool:
+    if has_active_trade_draft(user_id=user.id, session_id=session.id):
+        return True
+    return _looks_like_trade_query(query)
 
 
 def get_or_create_session(*, user, session_id: int | None = None, title: str | None = None) -> ChatSession:
@@ -62,6 +80,19 @@ def build_session_messages(*, session: ChatSession, max_messages: int | None = 3
         for message in rows
     ]
 
+
+def build_langchain_messages(*, session: ChatSession, max_messages: int | None = 30) -> list[BaseMessage]:
+    session_messages = build_session_messages(session=session, max_messages=max_messages)
+    result: list[BaseMessage] = []
+    for item in session_messages:
+        role = str(item.get("role") or "").upper()
+        content = str(item.get("content") or "")
+        if role == ChatMessage.Role.USER:
+            result.append(HumanMessage(content=content))
+        elif role == ChatMessage.Role.ASSISTANT:
+            result.append(AIMessage(content=content))
+    return result
+
 def run_chat(*, user, query: str, session_id: int | None = None) -> dict:
     session = get_or_create_session(
         user = user,
@@ -70,13 +101,22 @@ def run_chat(*, user, query: str, session_id: int | None = None) -> dict:
     )
     append_user_message(session=session, content=query)
     messages = build_session_messages(session=session)
-    answer = _react_agent.execute(
-        messages=messages,
-        context={
-            "user_id": user.id,
-            "session_id": session.id,
-        },
-    )
+    lc_messages = build_langchain_messages(session=session)
+    if _should_use_trading_workflow(user=user, session=session, query=query):
+        answer = _trading_workflow.execute(
+            user_id=user.id,
+            session_id=session.id,
+            query=query,
+            messages=lc_messages,
+        )
+    else:
+        answer = _react_agent.execute(
+            messages=messages,
+            context={
+                "user_id": user.id,
+                "session_id": session.id,
+            },
+        )
     append_assistant_message(session=session, content=answer)
     return {
         "session_id": session.id,
@@ -92,6 +132,7 @@ def stream_chat(*, user, query: str, session_id: int | None = None):
     )
     append_user_message(session=session, content=query)
     messages = build_session_messages(session=session)
+    lc_messages = build_langchain_messages(session=session)
     context = {
         "user_id": user.id,
         "session_id": session.id,
@@ -106,14 +147,27 @@ def stream_chat(*, user, query: str, session_id: int | None = None):
 
     chunks: list[str] = []
     try:
-        for chunk in _react_agent.stream_execute(messages=messages, context=context):
-            if not chunk:
-                continue
-            chunks.append(chunk)
+        if _should_use_trading_workflow(user=user, session=session, query=query):
+            answer = _trading_workflow.execute(
+                user_id=user.id,
+                session_id=session.id,
+                query=query,
+                messages=lc_messages,
+            )
+            chunks.append(answer)
             yield {
                 "event": "delta",
-                "data": chunk,
+                "data": answer,
             }
+        else:
+            for chunk in _react_agent.stream_execute(messages=messages, context=context):
+                if not chunk:
+                    continue
+                chunks.append(chunk)
+                yield {
+                    "event": "delta",
+                    "data": chunk,
+                }
 
         answer = "".join(chunks).strip()
         append_assistant_message(session=session, content=answer)

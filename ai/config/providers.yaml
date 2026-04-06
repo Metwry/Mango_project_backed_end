@@ -2,6 +2,11 @@ providers:
   openai:
     api_key_env: OPENAI_API_KEY
     chat_models:
+      gpt-4.1-mini:
+        temperature: 0
+        timeout: 60
+        max_retries: 2
+        max_tokens: 900
       gpt-5.4-mini:
         temperature: 0
         timeout: 60
