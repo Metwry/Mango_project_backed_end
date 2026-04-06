@@ -11,7 +11,7 @@ from django.utils import timezone
 from accounts.models import Accounts, is_system_investment_account
 from investment.models import Position
 from market.services.pricing.cache import build_quote_index, get_market_data_payload
-from market.services.pricing.fx import get_fx_rates
+from market.services.pricing.fx import get_usd_base_fx_snapshot
 from common.normalize import normalize_usd_rates, strip_market_suffix
 from common.utils import floor_bucket, market_currency, quantize_decimal, to_decimal
 
@@ -67,7 +67,7 @@ def _align_snapshot_time(raw_dt, level: str) -> timezone.datetime:
 
 # 加载美元基准汇率，并统一量化到快照精度。
 def _load_usd_rates() -> tuple[dict[str, Decimal], str | None]:
-    payload = get_fx_rates("USD")
+    payload = get_usd_base_fx_snapshot()
     raw_rates = payload.get("rates", {}) if isinstance(payload, dict) else {}
     rates: dict[str, Decimal] = {
         code: _q_fx(value)

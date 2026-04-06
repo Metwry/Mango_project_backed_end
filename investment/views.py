@@ -8,8 +8,9 @@ from .serializers import (
     TradeSerializer,
     InvestmentHistoryItemSerializer,
 )
-from .services.query_service import build_position_list_queryset, query_investment_history
+from .services.query_service import query_investment_history
 from .services.trade_service import execute_buy, execute_sell
+from .models import Position
 
 
 
@@ -34,9 +35,14 @@ class InvestmentSellView(APIView):
 class InvestmentPositionListView(APIView):
     # ed 返回当前用户的有效持仓列表。
     def get(self, request, *args, **kwargs):
-        queryset = build_position_list_queryset(user=request.user)
-        serializer = PositionListItemSerializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        queryset = (
+            Position.objects
+            .filter(user=request.user, quantity__gt=0)
+            .select_related("instrument")
+            .order_by("instrument__symbol")
+        )
+        payload = PositionListItemSerializer(queryset, many=True).data
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class InvestmentHistoryListView(APIView):

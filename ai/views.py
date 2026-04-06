@@ -19,7 +19,9 @@ from ai.services.chat_service import stream_chat
 
 def _format_sse(event: str, data) -> str:
     payload = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
-    return f"event: {event}\ndata: {payload}\n\n"
+    data_lines = str(payload).splitlines() or [""]
+    formatted_data = "\n".join(f"data: {line}" for line in data_lines)
+    return f"event: {event}\n{formatted_data}\n\n"
 
 
 class AIChatView(APIView):

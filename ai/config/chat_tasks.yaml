@@ -1,7 +1,7 @@
 tasks:
   system_agent:
-    provider: openai
-    model: gpt-5.4-mini
+    provider: aliyun
+    model: qwen-plus
     prompt_file: system_agent.txt
     expects_json: false
   news_analysis:
@@ -18,7 +18,7 @@ tasks:
     max_tokens: 300
   news_answer:
     provider: openai
-    model: gpt-5.4-mini
+    model: gpt-4.1-mini
     prompt_file: news_answer.txt
     expects_json: false
     max_tokens: 1800

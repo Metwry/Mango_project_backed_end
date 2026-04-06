@@ -214,7 +214,7 @@ CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_TASK_CREATE_MISSING_QUEUES = True
 CELERY_TASK_QUEUES = (
-    Queue("market_sync", queue_arguments={"x-message-ttl": 2400}),
+    Queue("market_sync", queue_arguments={"x-message-ttl": 240000}),
     Queue("snapshot_capture", queue_arguments={"x-message-ttl": 7200}),
     Queue("snapshot_aggregate"),
     Queue("snapshot_cleanup"),

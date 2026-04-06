@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from common.normalize import normalize_code, normalize_usd_rates
-from common.utils import quantize_decimal
+from common.utils import format_decimal_str, quantize_decimal
 
 from .cache import get_usd_rate_payload
 from ..refresh.usd_rates import refresh_usd_rates
@@ -14,6 +14,27 @@ def load_cached_usd_rates() -> dict[str, Decimal]:
     payload = get_usd_rate_payload()
     raw_rates = payload.get("rates") if isinstance(payload, dict) else {}
     return normalize_usd_rates(raw_rates)
+
+
+def get_usd_base_fx_snapshot() -> dict:
+    payload = get_usd_rate_payload()
+    rates = payload.get("rates") if isinstance(payload, dict) else {}
+    normalized_rates = normalize_usd_rates(rates)
+
+    if len(normalized_rates) <= 1:
+        refresh_usd_rates()
+        payload = get_usd_rate_payload()
+        rates = payload.get("rates") if isinstance(payload, dict) else {}
+        normalized_rates = normalize_usd_rates(rates)
+
+    return {
+        "base": "USD",
+        "updated_at": payload.get("updated_at") if isinstance(payload, dict) else None,
+        "rates": {
+            code: format_decimal_str(value)
+            for code, value in normalized_rates.items()
+        },
+    }
 
 
 # 按美元基准汇率将金额从一种货币换算到另一种货币。

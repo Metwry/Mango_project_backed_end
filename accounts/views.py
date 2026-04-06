@@ -2,7 +2,9 @@ from django_filters import rest_framework as filters
 from rest_framework import filters as drf_filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import Transaction
 from .pagination import TransactionPagination
@@ -12,6 +14,7 @@ from .services.account_service import (
     should_include_archived,
     update_account_from_serializer,
 )
+from .services.query_service import get_account_summary
 from .services.transaction_service import (
     create_transaction_for_user,
     delete_single_transaction,
@@ -19,6 +22,14 @@ from .services.transaction_service import (
     reverse_transaction,
 )
 from .serializers import AccountSerializer, TransactionDeleteQuerySerializer, TransactionSerializer
+
+
+class AccountSummaryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        payload = get_account_summary(user=request.user)
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class AccountViewSet(viewsets.ModelViewSet):
