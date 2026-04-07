@@ -3,12 +3,12 @@
 <plist version="1.0">
   <dict>
     <key>Label</key>
-    <string>cc.mango.backend.celery</string>
+    <string>cc.mango.backend.celery.market</string>
     <key>ProgramArguments</key>
     <array>
       <string>/bin/bash</string>
       <string>-lc</string>
-      <string>set -euo pipefail; PROJECT_ROOT="/Users/wry/Services/Mango_project/Mango_project_backed_end"; CONDA_BIN=""; for candidate in "/Users/wry/miniconda3/bin/conda" "/Users/wry/anaconda3/bin/conda" "/opt/anaconda3/bin/conda" "/opt/miniconda3/bin/conda"; do if [ -x "$candidate" ]; then CONDA_BIN="$candidate"; break; fi; done; if [ -z "$CONDA_BIN" ]; then CONDA_BIN="$(command -v conda || true)"; fi; if [ -z "$CONDA_BIN" ]; then echo "conda not found" >/dev/stderr; exit 1; fi; CONDA_BASE="$("$CONDA_BIN" info --base)"; source "$CONDA_BASE/etc/profile.d/conda.sh"; conda activate Back_end_project; cd "$PROJECT_ROOT"; exec python -m celery -A mango_project worker -n mango_backend@%h -Q market_sync,snapshot_capture,snapshot_aggregate,snapshot_cleanup -l info -P threads --concurrency 4</string>
+      <string>set -euo pipefail; PROJECT_ROOT="/Users/wry/Services/Mango_project/Mango_project_backed_end"; CONDA_BIN=""; for candidate in "/Users/wry/miniconda3/bin/conda" "/Users/wry/anaconda3/bin/conda" "/opt/anaconda3/bin/conda" "/opt/miniconda3/bin/conda"; do if [ -x "$candidate" ]; then CONDA_BIN="$candidate"; break; fi; done; if [ -z "$CONDA_BIN" ]; then CONDA_BIN="$(command -v conda || true)"; fi; if [ -z "$CONDA_BIN" ]; then echo "conda not found" >/dev/stderr; exit 1; fi; CONDA_BASE="$("$CONDA_BIN" info --base)"; source "$CONDA_BASE/etc/profile.d/conda.sh"; conda activate Back_end_project; cd "$PROJECT_ROOT"; exec python -m celery -A mango_project worker -n market_worker@%h -Q market_sync,news_ingest -l info -P threads --concurrency 4</string>
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/wry/Services/Mango_project/Mango_project_backed_end</string>
@@ -24,8 +24,8 @@
       <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/wry/miniconda3/bin:/Users/wry/miniconda3/condabin:/Users/wry/anaconda3/bin:/Users/wry/anaconda3/condabin:/opt/anaconda3/bin:/opt/anaconda3/condabin:/opt/miniconda3/bin:/opt/miniconda3/condabin</string>
     </dict>
     <key>StandardOutPath</key>
-    <string>/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/tmp_celery_logs/celery.out.log</string>
+    <string>/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/tmp_celery_logs/market.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/tmp_celery_logs/celery.err.log</string>
+    <string>/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/tmp_celery_logs/market.err.log</string>
   </dict>
 </plist>

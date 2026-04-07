@@ -117,21 +117,27 @@ resource/tmp_celery_logs/
 
 常见日志文件包括：
 
-- `market_sync.log`
+- `market.log`
+- `snapshot.log`
+- `ai.log`
 - `beat.log`
 - 你所在环境自定义的 worker / web 输出日志
 
 查看示例：
 
 ```bash
-tail -f resource/tmp_celery_logs/market_sync.log
+tail -f resource/tmp_celery_logs/market.log
+tail -f resource/tmp_celery_logs/snapshot.log
+tail -f resource/tmp_celery_logs/ai.log
 tail -f resource/tmp_celery_logs/beat.log
 ```
 
 Windows：
 
 ```powershell
-Get-Content resource\tmp_celery_logs\market_sync.log -Wait
+Get-Content resource\tmp_celery_logs\market.log -Wait
+Get-Content resource\tmp_celery_logs\snapshot.log -Wait
+Get-Content resource\tmp_celery_logs\ai.log -Wait
 Get-Content resource\tmp_celery_logs\beat.log -Wait
 ```
 
@@ -156,4 +162,3 @@ Get-Content resource\tmp_celery_logs\beat.log -Wait
 
 - [Deployment/backend_first_deploy_conda.md](./Deployment/backend_first_deploy_conda.md)
 - [Deployment/backend_deployment_guide.md](./Deployment/backend_deployment_guide.md)
-

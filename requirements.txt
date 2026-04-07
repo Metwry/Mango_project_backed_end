@@ -40,7 +40,7 @@ langchain-classic==1.0.3
 langchain-core==1.2.25
 langchain-community==0.4.1
 langchain-openai==1.1.12
-langgraph==1.1.4
+langgraph==1.1.6
 
 # Production web server
 gunicorn==23.0.0; platform_system != "Windows"

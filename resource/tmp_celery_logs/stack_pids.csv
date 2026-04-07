@@ -1,3 +1,5 @@
 name,pid,log
-beat,29220,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\resource\tmp_celery_logs\beat.log
-default,9516,C:\Users\13647\Desktop\WRY\Code\My_Project\Back_end_project\mango_project\resource\tmp_celery_logs\default.log
+beat,3697,/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/tmp_celery_logs/beat.log
+market,3703,/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/tmp_celery_logs/market.log
+snapshot,3708,/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/tmp_celery_logs/snapshot.log
+ai,3707,/Users/wry/Services/Mango_project/Mango_project_backed_end/resource/tmp_celery_logs/ai.log

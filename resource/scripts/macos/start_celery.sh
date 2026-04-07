@@ -4,10 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 ENV_NAME="Back_end_project"
-TARGETS="all"
+TARGETS="market,snapshot,ai"
 WITH_BEAT="0"
-POOL="threads"
-CONCURRENCY="4"
+POOL="${CELERY_WORKER_POOL:-threads}"
+CONCURRENCY="${CELERY_WORKER_CONCURRENCY:-4}"
 LOG_DIR="resource/tmp_celery_logs"
 STATE_DIR="resource/tmp_celery_state"
 FOLLOW_LOGS="0"
@@ -79,17 +79,23 @@ normalize_targets() {
     [[ -z "$lowered" ]] && continue
     case "$lowered" in
       all)
-        echo "all"
+        echo "market"
+        echo "snapshot"
+        echo "ai"
         ;;
       market|market_sync)
-        echo "market_sync"
+        echo "market"
         ;;
       snapshot)
-        echo "snapshot_capture"
-        echo "snapshot_aggregate"
-        echo "snapshot_cleanup"
+        echo "snapshot"
         ;;
       snapshot_capture|snapshot_aggregate|snapshot_cleanup)
+        echo "snapshot"
+        ;;
+      ai|news|news_ingest|news_embedding|ai_analysis)
+        echo "ai"
+        ;;
+      market|snapshot|ai)
         echo "$lowered"
         ;;
       *)
@@ -121,13 +127,23 @@ if [[ ! -x "${PYTHON_BIN}" ]]; then
   exit 1
 fi
 
-declare -A COMMANDS=(
-  ["all"]="-A mango_project worker -n mango_backend@%h -l info -P ${POOL} --concurrency ${CONCURRENCY}"
-  ["market_sync"]="-A mango_project worker -n market_sync@%h -Q market_sync -l info -P ${POOL} --concurrency ${CONCURRENCY}"
-  ["snapshot_capture"]="-A mango_project worker -n snapshot_capture@%h -Q snapshot_capture -l info -P ${POOL} --concurrency ${CONCURRENCY}"
-  ["snapshot_aggregate"]="-A mango_project worker -n snapshot_aggregate@%h -Q snapshot_aggregate -l info -P ${POOL} --concurrency ${CONCURRENCY}"
-  ["snapshot_cleanup"]="-A mango_project worker -n snapshot_cleanup@%h -Q snapshot_cleanup -l info -P ${POOL} --concurrency ${CONCURRENCY}"
-)
+command_for_target() {
+  case "$1" in
+    market)
+      echo "-A mango_project worker -n market_worker@%h -Q market_sync,news_ingest -l info -P ${POOL} --concurrency ${CONCURRENCY}"
+      ;;
+    snapshot)
+      echo "-A mango_project worker -n snapshot_worker@%h -Q snapshot_capture,snapshot_aggregate,snapshot_cleanup -l info -P ${POOL} --concurrency ${CONCURRENCY}"
+      ;;
+    ai)
+      echo "-A mango_project worker -n ai_worker@%h -Q news_embedding,ai_analysis -l info -P ${POOL} --concurrency ${CONCURRENCY}"
+      ;;
+    *)
+      echo "Unknown command target: $1" >&2
+      exit 1
+      ;;
+  esac
+}
 
 start_proc() {
   local name="$1"
@@ -140,7 +156,10 @@ start_proc() {
   echo "$!"
 }
 
-mapfile -t TARGET_WORKERS < <(normalize_targets "$TARGETS")
+TARGET_WORKERS=()
+while IFS= read -r worker; do
+  [[ -n "$worker" ]] && TARGET_WORKERS+=("$worker")
+done < <(normalize_targets "$TARGETS")
 if [[ ${#TARGET_WORKERS[@]} -eq 0 ]]; then
   echo "No worker targets resolved." >&2
   exit 1
@@ -158,7 +177,7 @@ fi
 
 for worker in "${TARGET_WORKERS[@]}"; do
   log="${RESOLVED_LOG_DIR}/${worker}.log"
-  pid="$(start_proc "${worker}" "${COMMANDS[$worker]}" "${log}")"
+  pid="$(start_proc "${worker}" "$(command_for_target "${worker}")" "${log}")"
   echo "${worker},${pid},${log}" >> "${PID_FILE}"
 done
 

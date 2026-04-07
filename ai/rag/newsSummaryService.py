@@ -28,11 +28,17 @@ class NewsSummaryService:
         self.search_service = NewsSearchService()
         self.prompt_text = get_prompt_text(self.TASK_NAME)
         self.prompt_template = ChatPromptTemplate.from_template(self.prompt_text)
-        self.model = LLMModelFactory.create_chat_model(task_name=self.TASK_NAME)
-        self.chain = self._init_chain()
+        self.model = None
+        self.chain = None
 
     def _init_chain(self):
         return self.prompt_template | self.model | StrOutputParser()
+
+    def _get_chain(self):
+        if self.chain is None:
+            self.model = LLMModelFactory.create_chat_model(task_name=self.TASK_NAME)
+            self.chain = self._init_chain()
+        return self.chain
 
     def rag_summarize(self, request: NewsSummaryQuery) -> str:
         result: NewsSearchResult = self.search_service.search(
@@ -45,7 +51,7 @@ class NewsSummaryService:
         if result.hit_count == 0:
             return self.EMPTY_RESULT_TEXT
 
-        return self.chain.invoke(
+        return self._get_chain().invoke(
             {
                 "query": request.query,
                 "response_mode": request.response_mode,

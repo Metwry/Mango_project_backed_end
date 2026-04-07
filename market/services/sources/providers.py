@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time as time_mod
 import urllib.parse
@@ -30,12 +31,8 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
-# --- 代理配置 ---
-PROXY_PORT = 7897
-PROXIES = {
-    "http": f"http://127.0.0.1:{PROXY_PORT}",
-    "https": f"http://127.0.0.1:{PROXY_PORT}",
-}
+_proxy_url = os.getenv("SYNC_SYMBOLS_PROXY", "").strip()
+PROXIES = {"http": _proxy_url, "https": _proxy_url} if _proxy_url else {}
 BINANCE_EXCHANGE_INFO_URL = "https://api4.binance.com/api/v3/exchangeInfo"
 BINANCE_SYMBOLS_CACHE_TTL_SECONDS = 900
 _BINANCE_SUPPORTED_SYMBOLS_CACHE: tuple[float, set[str]] | None = None
@@ -465,5 +462,4 @@ def fetch_fx_quotes_with_fallback(items: List[Tuple[str, str, str]]) -> List[Quo
 
     logger.warning("新浪外汇未返回数据或发生错误，无缝降级至 yfinance 兜底...")
     return fetch_fx_quotes_yfinance(items)
-
 

@@ -50,10 +50,130 @@ services:
       timeout: 5s
       retries: 10
 
+  web:
+    build:
+      context: .
+    container_name: mango-web
+    restart: unless-stopped
+    env_file:
+      - .env
+      - .env.docker
+    command: ["/app/resource/scripts/docker/start_web.sh"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./resource/tmp_celery_logs:/app/resource/tmp_celery_logs
+      - ./resource/tmp_celery_state:/app/resource/tmp_celery_state
+      - ./resource/logo_downloads:/app/resource/logo_downloads
+
+  beat:
+    build:
+      context: .
+    container_name: mango-beat
+    restart: unless-stopped
+    env_file:
+      - .env
+      - .env.docker
+    command: ["/app/resource/scripts/docker/start_beat.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./resource/tmp_celery_logs:/app/resource/tmp_celery_logs
+      - ./resource/tmp_celery_state:/app/resource/tmp_celery_state
+      - ./resource/logo_downloads:/app/resource/logo_downloads
+
+  worker-market:
+    build:
+      context: .
+    container_name: mango-worker-market
+    restart: unless-stopped
+    env_file:
+      - .env
+      - .env.docker
+    command: ["/app/resource/scripts/docker/start_worker.sh", "market_worker", "market_sync,news_ingest"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./resource/tmp_celery_logs:/app/resource/tmp_celery_logs
+      - ./resource/tmp_celery_state:/app/resource/tmp_celery_state
+      - ./resource/logo_downloads:/app/resource/logo_downloads
+
+  worker-snapshot:
+    build:
+      context: .
+    container_name: mango-worker-snapshot
+    restart: unless-stopped
+    env_file:
+      - .env
+      - .env.docker
+    command: ["/app/resource/scripts/docker/start_worker.sh", "snapshot_worker", "snapshot_capture,snapshot_aggregate,snapshot_cleanup"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./resource/tmp_celery_logs:/app/resource/tmp_celery_logs
+      - ./resource/tmp_celery_state:/app/resource/tmp_celery_state
+      - ./resource/logo_downloads:/app/resource/logo_downloads
+
+  worker-ai:
+    build:
+      context: .
+    container_name: mango-worker-ai
+    restart: unless-stopped
+    env_file:
+      - .env
+      - .env.docker
+    command: ["/app/resource/scripts/docker/start_worker.sh", "ai_worker", "news_embedding,ai_analysis"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./resource/tmp_celery_logs:/app/resource/tmp_celery_logs
+      - ./resource/tmp_celery_state:/app/resource/tmp_celery_state
+      - ./resource/logo_downloads:/app/resource/logo_downloads
+
 volumes:
   mango_postgres_data:
+    external: true
     name: ${POSTGRES_VOLUME_NAME:-mango_postgres_data}
   mango_redis_data:
+    external: true
     name: ${REDIS_VOLUME_NAME:-mango_redis_data}
   mango_rabbitmq_data:
+    external: true
     name: ${RABBITMQ_VOLUME_NAME:-mango_rabbitmq_data}
