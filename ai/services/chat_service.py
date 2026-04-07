@@ -8,14 +8,27 @@ from ai.agent.trading_agent import TradingWorkflow
 from ai.models import ChatMessage, ChatSession
 from ai.services.trade_workflow_store import has_active_trade_draft
 
-_react_agent = ReactAgent()
-_trading_workflow = TradingWorkflow()
-
-
-
 class SessionMessage(TypedDict):
     role: str
     content: str
+
+
+_react_agent: ReactAgent | None = None
+_trading_workflow: TradingWorkflow | None = None
+
+
+def _get_react_agent() -> ReactAgent:
+    global _react_agent
+    if _react_agent is None:
+        _react_agent = ReactAgent()
+    return _react_agent
+
+
+def _get_trading_workflow() -> TradingWorkflow:
+    global _trading_workflow
+    if _trading_workflow is None:
+        _trading_workflow = TradingWorkflow()
+    return _trading_workflow
 
 
 def _looks_like_trade_query(query: str) -> bool:
@@ -103,14 +116,14 @@ def run_chat(*, user, query: str, session_id: int | None = None) -> dict:
     messages = build_session_messages(session=session)
     lc_messages = build_langchain_messages(session=session)
     if _should_use_trading_workflow(user=user, session=session, query=query):
-        answer = _trading_workflow.execute(
+        answer = _get_trading_workflow().execute(
             user_id=user.id,
             session_id=session.id,
             query=query,
             messages=lc_messages,
         )
     else:
-        answer = _react_agent.execute(
+        answer = _get_react_agent().execute(
             messages=messages,
             context={
                 "user_id": user.id,
@@ -148,7 +161,7 @@ def stream_chat(*, user, query: str, session_id: int | None = None):
     chunks: list[str] = []
     try:
         if _should_use_trading_workflow(user=user, session=session, query=query):
-            answer = _trading_workflow.execute(
+            answer = _get_trading_workflow().execute(
                 user_id=user.id,
                 session_id=session.id,
                 query=query,
@@ -160,7 +173,7 @@ def stream_chat(*, user, query: str, session_id: int | None = None):
                 "data": answer,
             }
         else:
-            for chunk in _react_agent.stream_execute(messages=messages, context=context):
+            for chunk in _get_react_agent().stream_execute(messages=messages, context=context):
                 if not chunk:
                     continue
                 chunks.append(chunk)

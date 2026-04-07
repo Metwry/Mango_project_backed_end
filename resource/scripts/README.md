@@ -10,12 +10,14 @@
   - `resource/scripts/unix/`：Unix shell 脚本目录
   - `resource/scripts/macos/`：macOS 专用脚本目录
 - Celery 启动约定：
-  - `start_celery.*` 默认使用 `Targets all`
-  - `all` 现在表示启动一个统一 worker，监听全部已配置业务队列，再附加一个 `beat`
-  - Windows `start_celery.ps1` 默认等价于 `-Targets all -WithBeat -Pool threads -Concurrency 4`
+  - `start_celery.*` 默认使用 `Targets market,snapshot,ai`
+  - `all` 现在表示同时启动 3 个业务 worker：`market`、`snapshot`、`ai`
+  - Windows `start_celery.ps1` 默认等价于 `-Targets market,snapshot,ai -WithBeat -Pool threads -Concurrency 4`
   - 如果只想启动 worker、不带 `beat`，显式传 `-WithBeat:$false`
-  - 如果需要拆分为 4 个独立 worker，使用 `Targets market_sync,snapshot_capture,snapshot_aggregate,snapshot_cleanup`
-  - Windows 默认 `threads` 表示 1 个 worker 进程下 4 个并发线程；如果你要严格 4 个子进程，更适合在 Unix/macOS 上使用 `prefork`
+  - `market` worker 负责 `market_sync,news_ingest`
+  - `snapshot` worker 负责 `snapshot_capture,snapshot_aggregate,snapshot_cleanup`
+  - `ai` worker 负责 `news_embedding,ai_analysis`
+  - 当前默认每个 worker 都是 `threads` 池，`--concurrency 4`
 - 当前 RabbitMQ / Celery 运行方式：
   - `beat` 启动时会投递一次 `market_sync` 的全量初始化任务
   - 周期任务会带 `expires`
@@ -36,12 +38,14 @@
   - `resource/scripts/unix/`: Unix shell scripts
   - `resource/scripts/macos/`: macOS-specific scripts
 - Celery startup conventions:
-  - `start_celery.*` uses `Targets all` by default
-  - `all` now means one unified worker that listens to all configured business queues, plus one `beat`
-  - Windows `start_celery.ps1` defaults to `-Targets all -WithBeat -Pool threads -Concurrency 4`
+  - `start_celery.*` uses `Targets market,snapshot,ai` by default
+  - `all` now means the same three dedicated workers: `market`, `snapshot`, and `ai`
+  - Windows `start_celery.ps1` defaults to `-Targets market,snapshot,ai -WithBeat -Pool threads -Concurrency 4`
   - To start only the worker without `beat`, pass `-WithBeat:$false`
-  - To keep four isolated workers, use `Targets market_sync,snapshot_capture,snapshot_aggregate,snapshot_cleanup`
-  - Windows keeps `threads` by default, which means 4 concurrent threads inside one worker process; strict multi-process `prefork` is better suited to Unix/macOS
+  - `market` handles `market_sync,news_ingest`
+  - `snapshot` handles `snapshot_capture,snapshot_aggregate,snapshot_cleanup`
+  - `ai` handles `news_embedding,ai_analysis`
+  - Each worker now defaults to `threads` with `--concurrency 4`
 - Current RabbitMQ / Celery behavior:
   - `beat` publishes one forced `market_sync` refresh on startup
   - periodic tasks carry `expires`

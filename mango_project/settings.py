@@ -73,7 +73,7 @@ def _env_csv(name: str, default: str = "") -> list[str]:
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me").replace("$$", "$")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = _env_bool("DJANGO_DEBUG", "true")
@@ -166,7 +166,7 @@ CORS_ALLOW_CREDENTIALS = True
 CACHES = {
     "default": {
         "BACKEND": CACHE_BACKEND,
-        "LOCATION": "redis://127.0.0.1:6379/1",  # 使用 Redis 1 号数据库
+        "LOCATION": os.getenv("REDIS_CACHE_URL", "redis://127.0.0.1:6379/1"),
         "OPTIONS": CACHE_OPTIONS,
         "KEY_FUNCTION": "common.utils.redis_cache_key",
     }
@@ -197,8 +197,10 @@ SNAPSHOT_AGG_MON1_CRON_MINUTE = int(os.getenv("SNAPSHOT_AGG_MON1_CRON_MINUTE", "
 
 SNAPSHOT_CLEANUP_CRON_HOUR = int(os.getenv("SNAPSHOT_CLEANUP_CRON_HOUR", "1"))
 SNAPSHOT_CLEANUP_CRON_MINUTE = int(os.getenv("SNAPSHOT_CLEANUP_CRON_MINUTE", "45"))
-AI_NEWS_ANALYSIS_INTERVAL_MINUTES = int(os.getenv("AI_NEWS_ANALYSIS_INTERVAL_MINUTES", "15"))
-AI_NEWS_EMBEDDING_INTERVAL_MINUTES = int(os.getenv("AI_NEWS_EMBEDDING_INTERVAL_MINUTES", "15"))
+NEWS_INGEST_INTERVAL_HOURS = int(os.getenv("NEWS_INGEST_INTERVAL_HOURS", "2"))
+NEWS_INGEST_CRON_MINUTE = int(os.getenv("NEWS_INGEST_CRON_MINUTE", "0"))
+AI_NEWS_ANALYSIS_INTERVAL_MINUTES = int(os.getenv("AI_NEWS_ANALYSIS_INTERVAL_MINUTES", "30"))
+AI_NEWS_EMBEDDING_INTERVAL_MINUTES = int(os.getenv("AI_NEWS_EMBEDDING_INTERVAL_MINUTES", "30"))
 
 CELERY_BEAT_MAX_LOOP_INTERVAL = int(os.getenv("CELERY_BEAT_MAX_LOOP_INTERVAL", "5"))
 
@@ -257,6 +259,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "snapshot.tasks.task_cleanup_snapshot_history",
         "schedule": crontab(hour=SNAPSHOT_CLEANUP_CRON_HOUR, minute=SNAPSHOT_CLEANUP_CRON_MINUTE),
         "options": {"expires": 24 * 60 * 60},
+    },
+    "ingest-yahoo-news-every-n-hours": {
+        "task": "news.tasks.task_ingest_yahoo_news",
+        "schedule": crontab(minute=NEWS_INGEST_CRON_MINUTE, hour=f"*/{NEWS_INGEST_INTERVAL_HOURS}"),
+        "options": {"expires": max(NEWS_INGEST_INTERVAL_HOURS * 60 * 60 - 30, 60)},
     },
     "analyze-pending-news-every-n-minutes": {
         "task": "ai.tasks.task_analyze_pending_news_articles",

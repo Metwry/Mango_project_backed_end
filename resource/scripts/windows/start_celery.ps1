@@ -1,7 +1,7 @@
 param(
     [string]$ProjectRoot = "",
     [string]$EnvName = "Back_end_project",
-    [string[]]$Targets = @("default"),
+    [string[]]$Targets = @("market", "snapshot", "ai"),
     [switch]$WithBeat = $true,
     [string]$Pool = "threads",
     [int]$Concurrency = 4,
@@ -37,34 +37,35 @@ function Normalize-Targets([string[]]$rawTargets) {
         $v = $t.Trim().ToLowerInvariant()
         switch ($v) {
             "default" {
-                [void]$out.Add("default")
+                [void]$out.Add("market")
+                [void]$out.Add("snapshot")
+                [void]$out.Add("ai")
                 continue
             }
             "all" {
-                [void]$out.Add("all")
+                [void]$out.Add("market")
+                [void]$out.Add("snapshot")
+                [void]$out.Add("ai")
                 continue
             }
-            "market" { [void]$out.Add("market_sync"); continue }
-            "market_sync" { [void]$out.Add("market_sync"); continue }
+            "market" { [void]$out.Add("market"); continue }
+            "market_sync" { [void]$out.Add("market"); continue }
             "snapshot" {
-                [void]$out.Add("snapshot_capture")
-                [void]$out.Add("snapshot_aggregate")
-                [void]$out.Add("snapshot_cleanup")
+                [void]$out.Add("snapshot")
                 continue
             }
-            "snapshot_capture" { [void]$out.Add("snapshot_capture"); continue }
-            "snapshot_aggregate" { [void]$out.Add("snapshot_aggregate"); continue }
-            "snapshot_cleanup" { [void]$out.Add("snapshot_cleanup"); continue }
+            "snapshot_capture" { [void]$out.Add("snapshot"); continue }
+            "snapshot_aggregate" { [void]$out.Add("snapshot"); continue }
+            "snapshot_cleanup" { [void]$out.Add("snapshot"); continue }
             "news" {
-                [void]$out.Add("news_ingest")
-                [void]$out.Add("news_embedding")
-                [void]$out.Add("ai_analysis")
+                [void]$out.Add("ai")
                 continue
             }
-            "news_ingest" { [void]$out.Add("news_ingest"); continue }
-            "news_embedding" { [void]$out.Add("news_embedding"); continue }
-            "ai_analysis" { [void]$out.Add("ai_analysis"); continue }
-            default { throw "Unknown target: $t. Allowed: default, all, market_sync, snapshot_capture, snapshot_aggregate, snapshot_cleanup, news_ingest, news_embedding, ai_analysis, market, snapshot, news" }
+            "ai" { [void]$out.Add("ai"); continue }
+            "news_ingest" { [void]$out.Add("market"); continue }
+            "news_embedding" { [void]$out.Add("ai"); continue }
+            "ai_analysis" { [void]$out.Add("ai"); continue }
+            default { throw "Unknown target: $t. Allowed: default, all, market, snapshot, ai, market_sync, snapshot_capture, snapshot_aggregate, snapshot_cleanup, news_ingest, news_embedding, ai_analysis, news" }
         }
     }
     return @($out)
@@ -134,23 +135,9 @@ $targetWorkers = Normalize-Targets $Targets
 $pythonPath = Resolve-CondaPython $EnvName
 
 $commands = @{
-    "default" = @(
-        "-A", "mango_project",
-        "worker",
-        "-n", "mango_default@%h",
-        "-Q", "market_sync,snapshot_capture,snapshot_aggregate,snapshot_cleanup,news_ingest,news_embedding,ai_analysis",
-        "-l", "info",
-        "-P", $Pool,
-        "--concurrency", "$Concurrency"
-    )
-    "all" = @("-A", "mango_project", "worker", "-n", "mango_backend@%h", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
-    "market_sync" = @("-A", "mango_project", "worker", "-n", "market_sync@%h", "-Q", "market_sync", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
-    "snapshot_capture" = @("-A", "mango_project", "worker", "-n", "snapshot_capture@%h", "-Q", "snapshot_capture", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
-    "snapshot_aggregate" = @("-A", "mango_project", "worker", "-n", "snapshot_aggregate@%h", "-Q", "snapshot_aggregate", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
-    "snapshot_cleanup" = @("-A", "mango_project", "worker", "-n", "snapshot_cleanup@%h", "-Q", "snapshot_cleanup", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
-    "news_ingest" = @("-A", "mango_project", "worker", "-n", "news_ingest@%h", "-Q", "news_ingest", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
-    "news_embedding" = @("-A", "mango_project", "worker", "-n", "news_embedding@%h", "-Q", "news_embedding", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
-    "ai_analysis" = @("-A", "mango_project", "worker", "-n", "ai_analysis@%h", "-Q", "ai_analysis", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
+    "market" = @("-A", "mango_project", "worker", "-n", "market_worker@%h", "-Q", "market_sync,news_ingest", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
+    "snapshot" = @("-A", "mango_project", "worker", "-n", "snapshot_worker@%h", "-Q", "snapshot_capture,snapshot_aggregate,snapshot_cleanup", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
+    "ai" = @("-A", "mango_project", "worker", "-n", "ai_worker@%h", "-Q", "news_embedding,ai_analysis", "-l", "info", "-P", $Pool, "--concurrency", "$Concurrency")
 }
 
 $processEnv = @{

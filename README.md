@@ -60,9 +60,9 @@ Mango Backend 是 Mango Finance 的后端服务，基于 Django + Django REST Fr
 
 环境变量模板见 [`.env.example`](.env.example)。
 
-如果你想用仓库内置的 Docker 基础设施编排文件启动 PostgreSQL / Redis / RabbitMQ，
-优先使用根目录的 [`docker-compose.yml`](docker-compose.yml)。
-部署模板明细仍保留在 [`resource/deploy/docker-compose.infrastructure.yml`](resource/deploy/docker-compose.infrastructure.yml)。
+如果你想直接用 Docker 启动整套后端栈，优先使用根目录的 [`docker-compose.yml`](docker-compose.yml)。
+它现在同时编排 PostgreSQL / Redis / RabbitMQ / Django Web / Celery Beat / 3 个 Celery Worker。
+仅基础设施模板仍保留在 [`resource/deploy/docker-compose.infrastructure.yml`](resource/deploy/docker-compose.infrastructure.yml)。
 
 ### 6. 本地启动
 
@@ -77,28 +77,45 @@ python manage.py runserver
 后台任务建议单独启动：
 
 ```bash
-celery -A mango_project worker -l info
+celery -A mango_project worker -n market_worker@%h -Q market_sync,news_ingest -l info -P threads --concurrency 4
+celery -A mango_project worker -n snapshot_worker@%h -Q snapshot_capture,snapshot_aggregate,snapshot_cleanup -l info -P threads --concurrency 4
+celery -A mango_project worker -n ai_worker@%h -Q news_embedding,ai_analysis -l info -P threads --concurrency 4
 celery -A mango_project beat -l info
 ```
 
 说明：
 
-- `worker` 默认会监听项目中已配置的全部业务队列
+- 当前推荐拆分为 3 个 worker：`market`、`snapshot`、`ai`
 - `beat` 启动后会额外投递一次 `market_sync` 全量初始化任务，后续定时任务继续按原有市场时段和拉取节奏执行
-- 如果需要按队列拆分 worker，可单独指定 `-Q market_sync`、`-Q snapshot_capture`、`-Q snapshot_aggregate`、`-Q snapshot_cleanup`
+- 每个 worker 默认使用 `threads` 池，并发数为 `4`
 
 也可以直接使用 [resource/scripts/README.md](resource/scripts/README.md) 中的脚本。
 
-如果你只想把基础设施容器拉起来，再继续按 Conda 方式启动 Django / Celery，可执行：
+如果你要直接以 Docker 方式运行整套服务，可执行：
 
 ```bash
-cp docker-compose.env.example .env.compose
-docker compose --env-file .env.compose up -d
+docker compose up -d --build
 ```
+
+容器列表：
+
+- `mango-postgres`
+- `mango-redis`
+- `mango-rabbit`
+- `mango-web`
+- `mango-beat`
+- `mango-worker-market`
+- `mango-worker-snapshot`
+- `mango-worker-ai`
+
+如果你只想单独维护基础设施容器，再继续按宿主机方式启动 Django / Celery，才使用 [`resource/deploy/docker-compose.infrastructure.yml`](resource/deploy/docker-compose.infrastructure.yml)。
 
 ### 7. 定时任务
 
 - 市场数据拉取：`market.tasks.task_refresh_all`
+- 新闻抓取：`news.tasks.task_ingest_yahoo_news`，默认每 2 小时一次
+- 新闻 embedding 补齐：`news.tasks.task_embed_missing_news_articles`，默认每 30 分钟一次
+- 新闻 AI 分析补齐：`ai.tasks.task_analyze_pending_news_articles` / `ai.tasks.task_analyze_missing_news_articles`，默认每 30 分钟一次
 - 15 分钟快照采集：`snapshot.tasks.task_capture_m15_snapshots`
 - H4 / D1 / MON1 聚合：`snapshot.tasks.task_aggregate_*`
 - 历史快照清理：`snapshot.tasks.task_cleanup_snapshot_history`
@@ -173,11 +190,12 @@ Mango Backend is the API service behind Mango Finance. It is built with Django a
 Recommended Celery commands:
 
 ```bash
-celery -A mango_project worker -l info
+celery -A mango_project worker -n market_worker@%h -Q market_sync,news_ingest -l info -P threads --concurrency 4
+celery -A mango_project worker -n snapshot_worker@%h -Q snapshot_capture,snapshot_aggregate,snapshot_cleanup -l info -P threads --concurrency 4
+celery -A mango_project worker -n ai_worker@%h -Q news_embedding,ai_analysis -l info -P threads --concurrency 4
 celery -A mango_project beat -l info
 ```
 
 `beat` publishes one forced `market_sync` refresh on startup, while later scheduled refreshes still follow the normal market guard logic.
 
 For deployment and maintenance details, see [MAINTENANCE.md](docs/MAINTENANCE.md).
-
