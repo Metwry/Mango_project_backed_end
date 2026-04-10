@@ -23,4 +23,4 @@ RUN chmod +x /app/resource/scripts/docker/*.sh \
 
 EXPOSE 8000
 
-CMD ["gunicorn", "mango_project.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120"]
+CMD ["gunicorn", "mango_project.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "8", "--threads", "8", "--timeout", "120"]

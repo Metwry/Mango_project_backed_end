@@ -2,11 +2,12 @@ import json
 
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
-from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from ai.agent.graph import GlobalAgentWorkflow
 from ai.models import ChatSession
 from ai.serializers import (
     ChatRequestSerializer,
@@ -14,11 +15,20 @@ from ai.serializers import (
     ChatSessionListItemSerializer,
     ChatSessionRenameSerializer,
 )
-from ai.services.chat_service import stream_chat
+
+
+_global_workflow: GlobalAgentWorkflow | None = None
+
+
+def _get_global_workflow() -> GlobalAgentWorkflow:
+    global _global_workflow
+    if _global_workflow is None:
+        _global_workflow = GlobalAgentWorkflow()
+    return _global_workflow
 
 
 def _format_sse(event: str, data) -> str:
-    payload = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
+    payload = json.dumps(data, ensure_ascii=False)
     data_lines = str(payload).splitlines() or [""]
     formatted_data = "\n".join(f"data: {line}" for line in data_lines)
     return f"event: {event}\n{formatted_data}\n\n"
@@ -35,8 +45,13 @@ class AIChatView(APIView):
         session_id = serializer.validated_data.get("session_id")
 
         def event_stream():
-            for item in stream_chat(user=request.user, query=query, session_id=session_id):
-                yield _format_sse(item["event"], item["data"])
+            yield _format_sse("start", {"session_id": session_id})
+            for event in _get_global_workflow().stream_message(
+                user=request.user,
+                query=query,
+                session_id=session_id,
+            ):
+                yield _format_sse(event["event"], event["data"])
 
         response = StreamingHttpResponse(
             streaming_content=event_stream(),

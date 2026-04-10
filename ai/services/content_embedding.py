@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import os
 
 from ai.config import get_embedding_model_config, get_embedding_task_config
-from ai.llmmodels import LLMModelFactory
+from ai.llmmodels.model_factory import LLMModelFactory
 from ai.llmmodels.llm_runtime import embed_texts
 
 

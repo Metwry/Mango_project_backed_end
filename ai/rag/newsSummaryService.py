@@ -1,13 +1,11 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
+from django.utils import timezone
 from pydantic import BaseModel, Field
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
 
-from ai.config import get_prompt_text
-from ai.llmmodels import LLMModelFactory
 from news.service.news_search import NewsSearchResult, NewsSearchService
 
 
@@ -21,43 +19,38 @@ class NewsSummaryQuery(BaseModel):
 
 
 class NewsSummaryService:
-    TASK_NAME = "news_answer"
     EMPTY_RESULT_TEXT = "未检索到足够相关的财经新闻，暂时无法给出可靠回答。"
 
     def __init__(self) -> None:
         self.search_service = NewsSearchService()
-        self.prompt_text = get_prompt_text(self.TASK_NAME)
-        self.prompt_template = ChatPromptTemplate.from_template(self.prompt_text)
-        self.model = None
-        self.chain = None
-
-    def _init_chain(self):
-        return self.prompt_template | self.model | StrOutputParser()
-
-    def _get_chain(self):
-        if self.chain is None:
-            self.model = LLMModelFactory.create_chat_model(task_name=self.TASK_NAME)
-            self.chain = self._init_chain()
-        return self.chain
 
     def rag_summarize(self, request: NewsSummaryQuery) -> str:
+        published_from = self._normalize_datetime(request.published_from)
+        published_to = self._normalize_datetime(request.published_to)
         result: NewsSearchResult = self.search_service.search(
             query=request.query,
             response_mode=request.response_mode,
             top_k=request.top_k,
-            published_from=request.published_from,
-            published_to=request.published_to,
+            published_from=published_from,
+            published_to=published_to,
         )
+        payload = {
+            "query": request.query,
+            "response_mode": request.response_mode,
+            "hit_count": result.hit_count,
+            "context": result.context,
+        }
         if result.hit_count == 0:
-            return self.EMPTY_RESULT_TEXT
+            payload["message"] = self.EMPTY_RESULT_TEXT
+        return json.dumps(payload, ensure_ascii=False)
 
-        return self._get_chain().invoke(
-            {
-                "query": request.query,
-                "response_mode": request.response_mode,
-                "context": result.context,
-            }
-        ).strip()
+    @staticmethod
+    def _normalize_datetime(value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if timezone.is_naive(value):
+            return timezone.make_aware(value, timezone.get_current_timezone())
+        return value
 
 
 if __name__ == '__main__':

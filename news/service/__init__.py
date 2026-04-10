@@ -7,17 +7,14 @@ from news.service.news_search import (
     NewsSearchResult,
     NewsSearchService,
 )
-from ai.services import NewsQueryPlan, QueryUnderstandingService
 
 __all__ = [
     "NewsArticleEmbeddingService",
     "NewsEmbeddingStats",
     "NewsPutService",
     "NewsPutStats",
-    "NewsQueryPlan",
     "NewsSearchAnalysis",
     "NewsMatchedChunk",
-    "QueryUnderstandingService",
     "NewsSearchHit",
     "NewsSearchResult",
     "NewsSearchService",

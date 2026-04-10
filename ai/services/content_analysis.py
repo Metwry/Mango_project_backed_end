@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ai.config import get_analysis_task_config, get_prompt_path
-from ai.llmmodels import LLMModelFactory
+from ai.llmmodels.model_factory import LLMModelFactory
 from ai.llmmodels.llm_runtime import _invoke_with_optional_retries, coerce_chat_content
 
 

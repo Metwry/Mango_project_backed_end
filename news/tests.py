@@ -6,8 +6,7 @@ import aiohttp
 from django.test import SimpleTestCase
 from django.test import TestCase
 
-from ai.services.query_rewrite import QueryUnderstandingService
-from ai.rag import NewsSummaryQuery, NewsSummaryService
+from ai.rag.newsSummaryService import NewsSummaryQuery, NewsSummaryService
 from ai.models import AIAnalysis, AIAnalysisCountry, AIAnalysisInstrument, AIAnalysisTag
 from market.models import Instrument
 from news.models import NewsArticle, NewsArticleEmbedding
@@ -99,7 +98,7 @@ class YahooNewsFetchRetryTests(SimpleTestCase):
             response,
         ]
 
-        with patch("news.service.yahoo_news.asyncio.sleep", new=AsyncMock()) as sleep_mock:
+        with patch("news.txt.service.yahoo_news.asyncio.sleep", new=AsyncMock()) as sleep_mock:
             result = asyncio.run(fetch_text(session, "https://finance.yahoo.com/news/rss"))
 
         self.assertEqual(result, "ok")
@@ -110,7 +109,7 @@ class YahooNewsFetchRetryTests(SimpleTestCase):
         session = Mock()
         session.get.side_effect = aiohttp.ClientPayloadError("partial")
 
-        with patch("news.service.yahoo_news.asyncio.sleep", new=AsyncMock()):
+        with patch("news.txt.service.yahoo_news.asyncio.sleep", new=AsyncMock()):
             with self.assertRaises(aiohttp.ClientPayloadError):
                 asyncio.run(
                     fetch_text(
@@ -315,45 +314,6 @@ class NewsContentCleanupServiceTests(TestCase):
         cleaned = clean_stored_article_content(content)
 
         self.assertEqual(cleaned, "Precious metals are in high demand.")
-
-
-class QueryUnderstandingServiceTests(TestCase):
-    def test_understand_parses_semantic_query_and_time_range(self) -> None:
-        service = QueryUnderstandingService()
-        with patch.object(
-            service.analysis_service,
-            "analyze",
-            return_value=Mock(
-                data={
-                    "semantic_query": "bitcoin price weakness",
-                    "published_from": "2026-03-25T00:00:00+08:00",
-                    "published_to": "2026-04-01T23:59:59+08:00",
-                    "response_mode": "detail",
-                }
-            ),
-        ):
-            plan = service.understand(
-                query="最近比特币为什么跌",
-                timezone_name="Asia/Shanghai",
-                now=datetime.fromisoformat("2026-04-01T12:00:00+08:00"),
-            )
-
-        self.assertEqual(plan.raw_query, "最近比特币为什么跌")
-        self.assertEqual(plan.semantic_query, "bitcoin price weakness")
-        self.assertEqual(plan.published_from.isoformat(), "2026-03-25T00:00:00+08:00")
-        self.assertEqual(plan.published_to.isoformat(), "2026-04-01T23:59:59+08:00")
-        self.assertEqual(plan.response_mode, "detail")
-
-    def test_understand_falls_back_when_analysis_fails(self) -> None:
-        service = QueryUnderstandingService()
-        with patch.object(service.analysis_service, "analyze", side_effect=ValueError("bad prompt")):
-            plan = service.understand(query="bitcoin weakness")
-
-        self.assertEqual(plan.raw_query, "bitcoin weakness")
-        self.assertEqual(plan.semantic_query, "bitcoin weakness")
-        self.assertIsNone(plan.published_from)
-        self.assertIsNone(plan.published_to)
-        self.assertEqual(plan.response_mode, "overview")
 
 
 class NewsSearchServiceTests(TestCase):

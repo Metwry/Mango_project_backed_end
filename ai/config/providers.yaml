@@ -12,11 +12,6 @@ providers:
         timeout: 60
         max_retries: 2
         max_tokens: 900
-      gpt-5.4:
-        temperature: 0
-        timeout: 60
-        max_retries: 2
-        max_tokens: 1200
     embedding_models:
       text-embedding-3-small:
         batch_size: 10

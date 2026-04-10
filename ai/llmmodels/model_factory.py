@@ -21,6 +21,8 @@ def build_chat_model(config: dict[str, Any]) -> Any:
             temperature=config.temperature,
             timeout=config.timeout,
             max_retries=config.max_retries,
+            streaming=bool(getattr(config, "streaming", False)),
+            disable_streaming="tool_calling",
             api_key=os.environ[config.api_key_env],
             model_kwargs={
                 "enable_thinking": config.enable_thinking,

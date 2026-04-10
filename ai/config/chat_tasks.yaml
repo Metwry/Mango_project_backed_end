@@ -1,30 +1,39 @@
 tasks:
-  system_agent:
+  route_agent:
     provider: aliyun
     model: qwen-plus
     prompt_file: system_agent.txt
+    expects_json: true
+    streaming: false
+    max_tokens: 200
+
+  general_agent:
+    provider: aliyun
+    model: qwen-plus
+    prompt_file: general.txt
     expects_json: false
+    streaming: false
+    max_tokens: 1800
+
+  news_agent:
+    provider: aliyun
+    model: qwen-plus
+    prompt_file: news.txt
+    expects_json: false
+    streaming: false
+    max_tokens: 1800
+
+  trading_agent:
+    provider: aliyun
+    model: qwen-plus
+    prompt_file: trading.txt
+    expects_json: false
+    streaming: false
+    max_tokens: 1800
   news_analysis:
     provider: aliyun
     model: qwen-plus
     prompt_file: news_analysis.txt
     source_type: news_article
     expects_json: true
-  news_query_understanding:
-    provider: openai
-    model: gpt-5.4-mini
-    prompt_file: news_query_rewrite.txt
-    expects_json: true
-    max_tokens: 300
-  news_answer:
-    provider: openai
-    model: gpt-4.1-mini
-    prompt_file: news_answer.txt
-    expects_json: false
-    max_tokens: 1800
-  position_summary:
-    provider: openai
-    model: gpt-5.4-mini
-    prompt_file: position_summary.txt
-    expects_json: false
-    max_tokens: 1600
+    streaming: false

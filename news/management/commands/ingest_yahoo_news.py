@@ -6,7 +6,7 @@ from news.tasks import ingest_yahoo_news
 
 
 class Command(BaseCommand):
-    help = "Fetch Yahoo Finance news and persist deduplicated articles."
+    help = "Fetch Yahoo Finance news.txt and persist deduplicated articles."
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("--limit", type=int, default=50)

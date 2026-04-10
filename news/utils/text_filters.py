@@ -13,7 +13,7 @@ NOISE_PATTERNS = [
     re.compile(r"^read more here\.?$", re.I),
     re.compile(r"^read the full report here\.?$", re.I),
     re.compile(r"^read more about .*?$", re.I),
-    re.compile(r"^read the latest financial and business news from yahoo finance\.?$", re.I),
+    re.compile(r"^read the latest financial and business news.txt from yahoo finance\.?$", re.I),
     re.compile(r"^follow along here\.?$", re.I),
     re.compile(r"^see more here\.?$", re.I),
     re.compile(r"^click here\.?$", re.I),
@@ -31,7 +31,7 @@ TAIL_CUTOFF_PATTERNS = [
     "you must obtain professional or specialist advice",
     "see our free report on the best short-term ai stock",
     "read next:",
-    "follow insider monkey on google news",
+    "follow insider monkey on google news.txt",
 ]
 
 

@@ -5,7 +5,7 @@ from django.core.cache import cache
 from django.db.models import Exists, OuterRef
 
 from ai.models import AIAnalysis
-from ai.services import NewsAnalysisService
+from ai.services.news.analysis import NewsAnalysisService
 from news.models import NewsArticle
 
 

@@ -77,6 +77,7 @@ def get_chat_model_config(task_name: str) -> ConfigObject:
             "timeout": model_config.timeout,
             "max_retries": model_config.max_retries,
             "max_tokens": getattr(task_config, "max_tokens", model_config.max_tokens),
+            "streaming": getattr(task_config, "streaming", getattr(model_config, "streaming", False)),
             "reasoning_effort": getattr(task_config, "reasoning_effort", getattr(model_config, "reasoning_effort", None)),
             "verbosity": getattr(task_config, "verbosity", getattr(model_config, "verbosity", None)),
             "enable_thinking": getattr(task_config, "enable_thinking", getattr(model_config, "enable_thinking", None)),

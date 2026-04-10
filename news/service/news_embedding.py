@@ -7,7 +7,7 @@ from typing import Any
 from django.db import transaction
 
 from ai.config import get_embedding_task_config
-from ai.services import EmbeddingService
+from ai.services.content_embedding import EmbeddingService
 from news.models import NewsArticle, NewsArticleEmbedding
 from news.utils.hash import calculate_content_md5
 

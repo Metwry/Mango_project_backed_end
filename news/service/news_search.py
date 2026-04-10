@@ -6,7 +6,7 @@ from datetime import datetime
 from pgvector.django import CosineDistance
 
 from ai.models import AIAnalysis
-from ai.services import EmbeddingService
+from ai.services.content_embedding import EmbeddingService
 from news.models import NewsArticleEmbedding
 
 

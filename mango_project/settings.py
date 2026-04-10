@@ -260,22 +260,22 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=SNAPSHOT_CLEANUP_CRON_HOUR, minute=SNAPSHOT_CLEANUP_CRON_MINUTE),
         "options": {"expires": 24 * 60 * 60},
     },
-    "ingest-yahoo-news-every-n-hours": {
+    "ingest-yahoo-news.txt-every-n-hours": {
         "task": "news.tasks.task_ingest_yahoo_news",
         "schedule": crontab(minute=NEWS_INGEST_CRON_MINUTE, hour=f"*/{NEWS_INGEST_INTERVAL_HOURS}"),
         "options": {"expires": max(NEWS_INGEST_INTERVAL_HOURS * 60 * 60 - 30, 60)},
     },
-    "analyze-pending-news-every-n-minutes": {
+    "analyze-pending-news.txt-every-n-minutes": {
         "task": "ai.tasks.task_analyze_pending_news_articles",
         "schedule": crontab(minute=f"*/{AI_NEWS_ANALYSIS_INTERVAL_MINUTES}"),
         "options": {"expires": max(AI_NEWS_ANALYSIS_INTERVAL_MINUTES * 60 - 5, 30)},
     },
-    "embed-missing-news-every-n-minutes": {
+    "embed-missing-news.txt-every-n-minutes": {
         "task": "news.tasks.task_embed_missing_news_articles",
         "schedule": crontab(minute=f"*/{AI_NEWS_EMBEDDING_INTERVAL_MINUTES}"),
         "options": {"expires": max(AI_NEWS_EMBEDDING_INTERVAL_MINUTES * 60 - 5, 30)},
     },
-    "analyze-missing-news-every-n-minutes": {
+    "analyze-missing-news.txt-every-n-minutes": {
         "task": "ai.tasks.task_analyze_missing_news_articles",
         "schedule": crontab(minute=f"*/{AI_NEWS_ANALYSIS_INTERVAL_MINUTES}"),
         "options": {"expires": max(AI_NEWS_ANALYSIS_INTERVAL_MINUTES * 60 - 5, 30)},
@@ -289,9 +289,9 @@ CELERY_TASK_ROUTES = {
     "snapshot.tasks.task_aggregate_d1_snapshots": {"queue": "snapshot_aggregate"},
     "snapshot.tasks.task_aggregate_mon1_snapshots": {"queue": "snapshot_aggregate"},
     "snapshot.tasks.task_cleanup_snapshot_history": {"queue": "snapshot_cleanup"},
-    "news.tasks.task_ingest_yahoo_news": {"queue": "news_ingest"},
-    "news.tasks.task_embed_news_article": {"queue": "news_embedding"},
-    "news.tasks.task_embed_missing_news_articles": {"queue": "news_embedding"},
+    "news.txt.tasks.task_ingest_yahoo_news": {"queue": "news_ingest"},
+    "news.txt.tasks.task_embed_news_article": {"queue": "news_embedding"},
+    "news.txt.tasks.task_embed_missing_news_articles": {"queue": "news_embedding"},
     "ai.tasks.task_analyze_news_article": {"queue": "ai_analysis"},
     "ai.tasks.task_analyze_missing_news_articles": {"queue": "ai_analysis"},
     "ai.tasks.task_analyze_pending_news_articles": {"queue": "ai_analysis"},

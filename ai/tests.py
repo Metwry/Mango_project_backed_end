@@ -3,9 +3,10 @@ from unittest.mock import Mock, patch
 import requests
 from django.test import TestCase
 
-from ai.llmmodels import LLMModelFactory
+from ai.llmmodels.model_factory import LLMModelFactory
 from ai.llmmodels.model_factory import build_chat_model
-from ai.services import AnalysisService, EmbeddingService
+from ai.services.content_analysis import AnalysisService
+from ai.services.content_embedding import EmbeddingService
 from ai.services.content_embedding import EmbeddingResult
 from ai.tasks import analyze_pending_news_articles
 from ai.models import AIAnalysis
@@ -153,16 +154,19 @@ class AnalysisRuntimeTests(TestCase):
             return_value=chat_client,
         ):
             result = service.analyze(
-                task_name="news_query_understanding",
+                task_name="news_analysis",
                 variables={
-                    "query": "hello",
-                    "current_datetime": "2026-04-02T00:00:00+08:00",
-                    "timezone_name": "Asia/Shanghai",
+                    "provider": "yahoo",
+                    "source": "Reuters",
+                    "title": "hello",
+                    "content": "hello",
+                    "language": "en",
+                    "published": "2026-04-02T00:00:00+08:00",
                 },
                 config_overrides={"provider": "aliyun", "model": "qwen-plus"},
             )
 
-        self.assertEqual(result.data["semantic_query"], "hello")
+        self.assertEqual(result.data["topic"], "AI")
         self.assertEqual(chat_client.invoke.call_count, 2)
         sleep_mock.assert_called_once()
 
@@ -176,11 +180,14 @@ class AnalysisRuntimeTests(TestCase):
             return_value=chat_client,
         ), self.assertRaises(ValueError):
             service.analyze(
-                task_name="news_query_understanding",
+                task_name="news_analysis",
                 variables={
-                    "query": "hello",
-                    "current_datetime": "2026-04-02T00:00:00+08:00",
-                    "timezone_name": "Asia/Shanghai",
+                    "provider": "yahoo",
+                    "source": "Reuters",
+                    "title": "hello",
+                    "content": "hello",
+                    "language": "en",
+                    "published": "2026-04-02T00:00:00+08:00",
                 },
                 config_overrides={"provider": "aliyun", "model": "qwen-plus"},
             )
@@ -222,7 +229,7 @@ class LLMModelFactoryTests(TestCase):
     def test_create_chat_model_returns_client(self) -> None:
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}, clear=True):
             model = LLMModelFactory.create_chat_model(
-                task_name="news_answer",
+                task_name="news_agent",
             )
 
         self.assertIsNotNone(model)

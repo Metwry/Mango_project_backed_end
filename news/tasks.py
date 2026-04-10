@@ -14,7 +14,7 @@ EMBEDDING_ENQUEUE_LOCK_TTL = 30
 
 
 def _embedding_enqueue_lock_key(article_id: int) -> str:
-    return f"news:enqueue:embedding:{article_id}"
+    return f"news.txt:enqueue:embedding:{article_id}"
 
 
 def enqueue_embedding(article_id: int) -> str:
@@ -43,7 +43,7 @@ def ingest_yahoo_news(
 
 
 @shared_task(
-    name="news.tasks.task_ingest_yahoo_news",
+    name="news.txt.tasks.task_ingest_yahoo_news",
     autoretry_for=(Exception,),
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
@@ -56,7 +56,7 @@ def task_ingest_yahoo_news(
 
 
 @shared_task(
-    name="news.tasks.task_embed_news_article",
+    name="news.txt.tasks.task_embed_news_article",
     autoretry_for=(Exception,),
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
@@ -95,6 +95,6 @@ def embed_missing_news_articles(*, limit: int = 100) -> dict[str, int]:
     return stats
 
 
-@shared_task(name="news.tasks.task_embed_missing_news_articles")
+@shared_task(name="news.txt.tasks.task_embed_missing_news_articles")
 def task_embed_missing_news_articles(limit: int = 100) -> dict[str, int]:
     return embed_missing_news_articles(limit=limit)
