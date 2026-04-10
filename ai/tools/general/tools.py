@@ -14,6 +14,7 @@ from ai.services.general.position_summary import PositionSummaryService
 from accounts.services import get_account_summary as query_account_summary
 from accounts.services import get_recent_transaction as query_recent_transaction
 from investment.services.query_service import get_recent_trades as query_recent_trades
+from market.services.pricing import get_fx_rates
 from snapshot.services.query_service import get_account_trend as query_account_trend
 from snapshot.services.query_service import get_position_trend as query_position_trend
 
@@ -61,6 +62,11 @@ class RecentTransactionQuery(BaseModel):
     model_config = ConfigDict(extra="allow")
     account_ids: list[int] | list[str] | None = Field(default=None, description="可选的账户 ID 列表")
     limit: int | None = Field(default=None, description="可选的返回条数，默认 10")
+
+
+class FxRateQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    quote_currency: str = Field(description="美元基准汇率对中的目标币种代码，例如 CNY、HKD、EUR。")
 
 
 @lru_cache(maxsize=1)
@@ -141,3 +147,28 @@ def get_recent_transaction(**kwargs) -> dict:
         account_ids=kwargs.get("account_ids"),
         limit=kwargs.get("limit"),
     )
+
+
+@tool(args_schema=FxRateQuery)
+def get_fx_rate(**kwargs) -> str:
+    """返回美元基准汇率对。输出中的 pair 采用 USD/XXX，表示 1 USD = x XXX。"""
+    quote_currency = str(kwargs.get("quote_currency") or "").strip().upper()
+    if not quote_currency:
+        raise ValueError("quote_currency is required")
+
+    snapshot = get_fx_rates("USD")
+    rates = snapshot.get("rates") or {}
+    if quote_currency not in rates:
+        raise ValueError(f"unsupported quote currency: {quote_currency}")
+
+    rate = rates[quote_currency]
+
+    payload = {
+        "base_currency": "USD",
+        "quote_currency": quote_currency,
+        "pair": f"USD/{quote_currency}",
+        "rate": rate,
+        "updated_at": snapshot.get("updated_at"),
+        "expression": f"1 USD = {rate} {quote_currency}",
+    }
+    return json.dumps(payload, ensure_ascii=False)

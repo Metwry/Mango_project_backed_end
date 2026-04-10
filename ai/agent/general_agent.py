@@ -9,6 +9,7 @@ from ai.tools.general.tools import (
     get_account_summary,
     get_account_trend,
     get_current_time,
+    get_fx_rate,
     get_position_trend,
     get_recent_trades,
     get_recent_transaction,
@@ -31,6 +32,7 @@ class GeneralAgent:
             system_prompt=self.prompt_template,
             tools=[
                 get_current_time,
+                get_fx_rate,
                 get_user_position,
                 get_account_summary,
                 get_account_trend,
