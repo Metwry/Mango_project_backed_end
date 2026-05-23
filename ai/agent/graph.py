@@ -5,13 +5,16 @@ import re
 import time
 from typing import Any, Literal, NotRequired, TypedDict
 
+from langgraph.graph import END, START, StateGraph
+
 from .nodes import (
     GENERIC_WORKFLOW_ERROR_MESSAGE,
-    append_assistant_message,
     decide_intent,
+    finalize_response,
     general_agent,
     news_agent,
     prepare_session,
+    route_after_intent,
     trading_agent,
 )
 
@@ -21,14 +24,11 @@ class GlobalAgentState(TypedDict):
     query: str
     session_id: NotRequired[int | None]
 
-    session: NotRequired[Any]
-    session_messages: NotRequired[list[dict[str, str]]]
     lc_messages: NotRequired[list[Any]]
     has_active_trade_draft: NotRequired[bool]
 
     route: NotRequired[Literal["NEWS", "GENERAL", "TRADING", "ERROR"]]
     response_message: NotRequired[str]
-    emit_direct_response: NotRequired[bool]
 
 
 class GraphResponseEvent(TypedDict):
@@ -68,7 +68,32 @@ def _iter_fake_stream_chunks(text: str, *, max_chunk_size: int = 72) -> Iterator
 
 class GlobalAgentWorkflow:
     def __init__(self):
-        pass
+        graph = StateGraph(GlobalAgentState)
+        graph.add_node("prepare_session", prepare_session)
+        graph.add_node("decide_intent", decide_intent)
+        graph.add_node("general_agent", general_agent)
+        graph.add_node("news_agent", news_agent)
+        graph.add_node("trading_agent", trading_agent)
+        graph.add_node("finalize", finalize_response)
+
+        graph.add_edge(START, "prepare_session")
+        graph.add_edge("prepare_session", "decide_intent")
+        graph.add_conditional_edges(
+            "decide_intent",
+            route_after_intent,
+            {
+                "general_agent": "general_agent",
+                "news_agent": "news_agent",
+                "trading_agent": "trading_agent",
+                "finalize": "finalize",
+            },
+        )
+        graph.add_edge("general_agent", "finalize")
+        graph.add_edge("news_agent", "finalize")
+        graph.add_edge("trading_agent", "finalize")
+        graph.add_edge("finalize", END)
+
+        self.graph = graph.compile()
 
     @staticmethod
     def _emit_fake_stream(*, content: str) -> Iterator[GraphResponseEvent]:
@@ -88,50 +113,33 @@ class GlobalAgentWorkflow:
         query: str,
         session_id: int | None = None,
     ) -> Iterator[GraphResponseEvent]:
-        state: GlobalAgentState = {
+        initial_state: GlobalAgentState = {
             "user": user,
             "query": query,
             "session_id": session_id,
         }
+        latest_state: dict[str, Any] = dict(initial_state)
+        session_emitted = False
 
-        state.update(prepare_session(state))
-        current_session_id = state["session_id"]
-        yield {
-            "event": "session",
-            "data": {
-                "session_id": current_session_id,
-            },
-        }
+        for snapshot in self.graph.stream(initial_state, stream_mode="values"):
+            if not isinstance(snapshot, dict):
+                continue
+            latest_state = snapshot
+            current_session_id = latest_state.get("session_id")
+            if not session_emitted and current_session_id is not None:
+                yield {
+                    "event": "session",
+                    "data": {
+                        "session_id": current_session_id,
+                    },
+                }
+                session_emitted = True
 
-        state.update(decide_intent(state))
-        route = state.get("route", "GENERAL")
-
-        if route in {"GENERAL", "NEWS"}:
-            response = general_agent(state) if route == "GENERAL" else news_agent(state)
-            answer = str(response.get("response_message") or GENERIC_WORKFLOW_ERROR_MESSAGE).strip()
-        elif route == "TRADING":
-            trading_workflow = trading_agent(state, stream=True)
-            final_payload: dict[str, Any] | None = None
-            for event in trading_workflow:
-                if event["event"] == "status":
-                    yield event
-                    continue
-                if event["event"] == "done":
-                    final_payload = event["data"] if isinstance(event["data"], dict) else {}
-            response_message = (
-                str(final_payload.get("response_message") or "").strip()
-                if isinstance(final_payload, dict)
-                else ""
-            )
-            answer = response_message or GENERIC_WORKFLOW_ERROR_MESSAGE
-        else:
-            answer = str(state.get("response_message") or GENERIC_WORKFLOW_ERROR_MESSAGE).strip()
-
-        append_assistant_message(session=state["session"], content=answer)
+        answer = str(latest_state.get("response_message") or GENERIC_WORKFLOW_ERROR_MESSAGE).strip()
         yield from self._emit_fake_stream(content=answer)
         yield {
             "event": "done",
             "data": {
-                "session_id": current_session_id,
+                "session_id": latest_state.get("session_id"),
             },
         }

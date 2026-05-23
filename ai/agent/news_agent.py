@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TypedDict
 
 from langchain.agents import create_agent
+from langchain_core.messages import BaseMessage
 
 from ai.agent.runtime_context import reset_agent_context, set_agent_context
 from ai.config import get_prompt_text
@@ -27,7 +28,7 @@ class NewsAgent:
 
     def execute(
         self,
-        messages: list[dict],
+        messages: list[BaseMessage],
         context: AgentContext,
     ) -> str:
         token = set_agent_context(context)

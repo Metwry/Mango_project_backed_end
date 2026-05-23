@@ -4,6 +4,7 @@ import json
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from langchain_core.messages import AIMessage, ToolMessage
 
 from ai.agent.runtime_context import get_agent_context
 from ai.llmmodels.model_factory import LLMModelFactory
@@ -13,7 +14,7 @@ from ai.services.trading.store import (
     load_trade_draft,
     save_trade_draft,
 )
-from ai.tools.trading.tools import TRADING_TOOLS, describe_trade_entities
+from ai.tools.trading.tools import TRADING_TOOLS, describe_trade_entities, get_current_time
 from investment.services.trade_preview_service import preview_trade_draft
 from investment.services.trade_service import execute_buy, execute_sell
 
@@ -28,6 +29,19 @@ from .schema import (
 
 
 MAX_TOOL_ITERATIONS = 6
+CURRENT_TIME_TOOL_NAME = get_current_time.name
+
+
+def route_after_agent(state: dict) -> str:
+    mapping = {
+        "TOOL": "tool_node",
+        "ASK_CLARIFY": "end",
+        "PREVIEW": "preview_trade",
+        "EXECUTE": "execute_trade",
+        "CANCEL": "cancel_trade",
+        "INVALID": "end",
+    }
+    return mapping.get(state.get("next_action", "INVALID"), "end")
 
 
 def load_trade_draft_node(state):
@@ -45,19 +59,19 @@ def trading_agent_node(state):
     current_draft = TradeDraft.from_payload(state.get("draft"))
     draft_status = state.get("draft_status", "EMPTY")
     current_messages = state.get("messages", [])
+    time_tool_called = _has_called_time_tool(current_messages)
 
     get_agent_context()["current_draft"] = current_draft.to_payload()
     get_agent_context()["draft_status"] = draft_status
 
-    model = LLMModelFactory.create_chat_model(task_name="trading_agent").bind_tools(
-        [*TRADING_TOOLS, submit_trade_decision]
-    )
+    available_tools = [tool for tool in TRADING_TOOLS if not (time_tool_called and tool.name == CURRENT_TIME_TOOL_NAME)]
+    model = LLMModelFactory.create_chat_model(task_name="trading_agent").bind_tools([*available_tools, submit_trade_decision])
     response = model.invoke(
         build_agent_messages(
             draft=current_draft,
             draft_status=draft_status,
-            user_message=state["user_message"],
             current_messages=current_messages,
+            time_tool_called=time_tool_called,
         )
     )
 
@@ -94,19 +108,9 @@ def trading_agent_node(state):
             decision=AgentDecision.from_tool_args(decision_calls[0].get("args") or {}),
         )
 
-    decision = _parse_decision_from_response(response)
-    if decision is not None:
-        return _apply_decision(
-            state=state,
-            current_draft=current_draft,
-            draft_status=draft_status,
-            updates=updates,
-            decision=decision,
-        )
-
     updates["next_action"] = "INVALID"
     updates["event"] = "AGENT_INVALID"
-    updates["payload"] = {"message": "agent 没有返回结构化决策。"}
+    updates["payload"] = {"message": "agent 未通过 submit_trade_decision 返回结构化决策。"}
     return updates
 
 
@@ -272,6 +276,17 @@ def _get_user_from_state(state):
     return get_user_model().objects.get(id=state["user_id"])
 
 
+def _has_called_time_tool(messages) -> bool:
+    for message in messages:
+        if isinstance(message, AIMessage):
+            tool_calls = list(getattr(message, "tool_calls", None) or [])
+            if any(call.get("name") == CURRENT_TIME_TOOL_NAME for call in tool_calls):
+                return True
+        if isinstance(message, ToolMessage) and getattr(message, "name", None) == CURRENT_TIME_TOOL_NAME:
+            return True
+    return False
+
+
 def _describe_trade_entities_from_ids(*, instrument_id: int, cash_account_id: int) -> tuple[str, str, str]:
     try:
         payload = json.loads(
@@ -316,43 +331,3 @@ def _apply_decision(*, state, current_draft: TradeDraft, draft_status: str, upda
             ),
         )
     return updates
-
-
-def _parse_decision_from_response(response) -> AgentDecision | None:
-    content = getattr(response, "content", None)
-    text = content if isinstance(content, str) else str(content or "")
-    stripped = text.strip()
-    if not stripped:
-        return None
-    if stripped.startswith("```"):
-        lines = stripped.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        stripped = "\n".join(lines).strip()
-    try:
-        payload = json.loads(stripped)
-    except Exception:
-        return None
-    if not isinstance(payload, dict):
-        return None
-
-    draft_payload = payload.get("draft")
-    flattened_payload = {
-        "next_action": payload.get("next_action"),
-        "message": payload.get("message"),
-    }
-    if isinstance(draft_payload, dict):
-        for key in ("side", "instrument_id", "cash_account_id", "quantity", "price"):
-            if key in draft_payload:
-                flattened_payload[key] = draft_payload.get(key)
-    else:
-        for key in ("side", "instrument_id", "cash_account_id", "quantity", "price"):
-            if key in payload:
-                flattened_payload[key] = payload.get(key)
-
-    try:
-        return AgentDecision.from_tool_args(flattened_payload)
-    except Exception:
-        return None

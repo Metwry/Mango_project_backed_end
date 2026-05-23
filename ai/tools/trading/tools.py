@@ -182,6 +182,45 @@ def resolve_trade_account(
 
 
 @tool
+def list_user_trade_accounts(
+    currency: str | None = None,
+    only_active: bool = True,
+    user_id: Annotated[int, InjectedState("user_id")] = 0,
+) -> str:
+    """列出当前用户所有真实账户数据；可按币种筛选。用于账户选择、候选展示和账户名匹配前的事实查询。"""
+    user = _get_current_user(user_id)
+    summary = get_account_summary(user=user)
+    normalized_currency = str(currency or "").strip().upper()
+
+    accounts = []
+    for item in summary.get("accounts", []):
+        status = str(item.get("status") or "")
+        current_currency = str(item.get("currency") or "").upper()
+        if only_active and status != "active":
+            continue
+        if normalized_currency and current_currency != normalized_currency:
+            continue
+        accounts.append(
+            {
+                "cash_account_id": int(item.get("account_id") or 0),
+                "cash_account_name": str(item.get("name") or ""),
+                "cash_account_currency": current_currency,
+                "balance": str(item.get("balance") or ""),
+                "status": status,
+                "account_type": str(item.get("type") or ""),
+            }
+        )
+
+    payload = {
+        "currency": normalized_currency or None,
+        "only_active": bool(only_active),
+        "count": len(accounts),
+        "accounts": accounts,
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+@tool
 def get_recent_trade_recommendation(
     instrument_id: int | None = None,
     instrument_query: str | None = None,
@@ -321,6 +360,7 @@ def describe_trade_entities(instrument_id: int | None = None, cash_account_id: i
 
 TRADING_TOOLS = [
     get_current_time,
+    list_user_trade_accounts,
     resolve_trade_instrument,
     resolve_trade_account,
     get_recent_trade_recommendation,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Literal
 
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
@@ -113,13 +113,19 @@ def build_agent_messages(
     *,
     draft: TradeDraft,
     draft_status: str,
-    user_message: str,
     current_messages: list[BaseMessage],
+    time_tool_called: bool,
 ) -> list[BaseMessage]:
+    current_user_message = ""
+    for message in reversed(current_messages):
+        if isinstance(message, HumanMessage):
+            current_user_message = str(message.content or "")
+            break
     context_payload = {
         "draft": draft.to_payload(),
         "draft_status": draft_status,
-        "current_user_message": user_message,
+        "current_user_message": current_user_message,
+        "time_tool_called": time_tool_called,
     }
     return [
         SystemMessage(content=TRADING_SYSTEM_PROMPT),
@@ -127,6 +133,12 @@ def build_agent_messages(
             content=(
                 "你是交易工作流中的决策节点。"
                 "如果需要更多信息，请调用交易工具。"
+                "在单次用户请求中，get_current_time 最多只能调用一次；"
+                "如果 context_payload.time_tool_called 为 true，就不要再次调用 get_current_time。"
+                "解析标的前，先从用户原句提取核心标的词或代码；"
+                "不要把买卖动作、数量、市场描述整句原样传给 resolve_trade_instrument。"
+                "如果 resolve_trade_instrument 返回多个 candidates，且其中只有一个是普通公司/正股、其余是 ETF 或杠杆反向品，"
+                "而用户又没有明确要求 ETF/杠杆/做多做空，则直接选择普通公司/正股。"
                 "如果已经可以决定下一步，请只调用 submit_trade_decision。"
                 "不要输出自然语言，不要在同一轮同时调用 submit_trade_decision 和其他工具。\n"
                 f"{json.dumps(context_payload, ensure_ascii=False)}"
